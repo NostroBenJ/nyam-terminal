@@ -1,0 +1,39 @@
+/* Trading terminal design tokens — the single source of truth.
+   Mirrors ~/.claude/skills/trading-ui/tokens.css. Never inline a hex value;
+   add the token here first. Six hues is the whole vocabulary. */
+
+:root {
+  /* surfaces */
+  --bg:        #0a0e14;
+  --panel:     #0f141c;
+  --panel-2:   #131a24;
+  --line:      #1e2733;
+
+  /* text */
+  --text:      #cdd6e4;
+  --muted:     #6b7888;
+  --dim:       #3b4554;
+
+  /* direction — never carried by hue alone; always a sign or position too */
+  --up:          #26a69a;
+  --up-soft:     rgba(38, 166, 154, .16);
+  --down:        #ef5350;
+  --down-soft:   rgba(239, 83, 80, .16);
+
+  /* the one warm highlight: selection, active tab, focus */
+  --accent:      #e6b450;
+  --accent-soft: rgba(230, 180, 80, .16);
+
+  /* non-directional / informational series */
+  --neutral:     #5a8dee;
+  --neutral-soft: rgba(90, 141, 238, .16);
+
+  /* type */
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /* density */
+  --row-h:     26px;
+  --panel-pad: 14px;
+  --radius:    4px;
+}
