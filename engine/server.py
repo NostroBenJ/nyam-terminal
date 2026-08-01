@@ -35,7 +35,7 @@ import config
 from pipeline import build_snapshot
 from logging_obsidian import log_to_obsidian
 from analysis import tracker
-from data.data_sources import get_ohlc
+from data.data_sources import get_ohlc, get_bars
 
 DEFAULT_PORT = 8765
 STARTED_AT = dt.datetime.now(dt.timezone.utc)
@@ -127,6 +127,20 @@ def api_bias(ticker: str = None):
     if data is None:
         data = refresh(t)
     return JSONResponse(data)
+
+
+@app.get("/api/bars")
+def api_bars(ticker: str = None, interval: str = "5m", days: int = 5):
+    """
+    OHLC for the price chart.
+
+    Deliberately NOT part of the /api/bias snapshot. Bars refresh on a different
+    cadence than a positioning snapshot and are far larger; bundling them would
+    force the whole board to re-render on every candle and make one slow feed
+    block every panel.
+    """
+    t = (ticker or _active["ticker"]).upper()
+    return JSONResponse(get_bars(t, interval=interval, lookback_days=days))
 
 
 @app.post("/api/ticker")

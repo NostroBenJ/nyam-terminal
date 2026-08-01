@@ -136,6 +136,24 @@ pub fn run() {
             let handle = app.handle().clone();
             let child = spawn_engine(&handle);
             *app.state::<Engine>().0.lock().unwrap() = child;
+
+            // Report the DPI scale. The CSS viewport is physical/scale, which
+            // is what the layout breakpoints actually see — on a high-DPI or
+            // scaled display a 1500px window can lay out as if it were ~850px,
+            // and guessing at that from a screenshot is how you tune a
+            // breakpoint against the wrong number.
+            if let Some(w) = app.get_webview_window("main") {
+                if let (Ok(scale), Ok(size)) = (w.scale_factor(), w.inner_size()) {
+                    println!(
+                        "[shell] dpi scale {:.2} · physical {}x{} · css ~{:.0}x{:.0}",
+                        scale,
+                        size.width,
+                        size.height,
+                        size.width as f64 / scale,
+                        size.height as f64 / scale
+                    );
+                }
+            }
             Ok(())
         })
         .build(tauri::generate_context!())

@@ -41,13 +41,17 @@ code {
 
 /* --------------------------------------------------------------- topbar -- */
 
+/* Wraps rather than clips. Windows display scaling can put the effective CSS
+   width well under the physical pixel width, and a top bar that silently cuts
+   off the expected-move range is hiding a number, not saving space. */
 .topbar {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 8px 18px;
+  flex-wrap: wrap;
   flex: 0 0 auto;
-  padding: 0 14px;
-  height: 52px;
+  padding: 7px 14px;
+  min-height: 52px;
   background: var(--panel);
   border-bottom: 1px solid var(--line);
 }
@@ -159,7 +163,7 @@ code {
 .grid {
   flex: 1 1 auto;
   display: grid;
-  grid-template-columns: minmax(420px, 1.15fr) minmax(380px, 1fr);
+  grid-template-columns: minmax(380px, 1.25fr) minmax(340px, 1fr);
   gap: 10px;
   padding: 10px;
   min-height: 0;
@@ -174,22 +178,30 @@ code {
   scrollbar-color: var(--line) transparent;
 }
 
-@media (max-width: 1080px) {
+/* 920px, not 1080. Display scaling means a 1500px window can report ~960-1150
+   CSS px, and at 1080 a perfectly wide monitor collapsed to a single column. */
+@media (max-width: 920px) {
   .grid { grid-template-columns: 1fr; overflow-y: auto; }
   .grid__col { overflow: visible; }
 }
 
 /* ---------------------------------------------------------------- panel -- */
 
+/* Panels size to their CONTENT and the column scrolls.
+   Letting flex shrink them instead gave every panel its own cramped scrollbar
+   — the level map showed 2 of 4 rows, which on a board you trade from means a
+   level simply isn't there unless you go hunting for it. */
 .panel {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   display: flex;
   flex-direction: column;
+  flex: 0 0 auto;
   min-height: 0;
 }
-.panel--grow { flex: 1 1 auto; }
+/* The chart is the one panel that wants to fill space rather than hug content. */
+.panel--grow { flex: 1 0 auto; min-height: 400px; }
 
 .panel__head {
   display: flex;
@@ -209,7 +221,7 @@ code {
   text-overflow: ellipsis;
 }
 .panel__right { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
-.panel__body { padding: var(--panel-pad); overflow: auto; flex: 1 1 auto; min-height: 0; }
+.panel__body { padding: var(--panel-pad); flex: 1 1 auto; min-height: 0; }
 
 .empty {
   margin: 0;
@@ -228,6 +240,69 @@ code {
   font-size: 10px;
   color: var(--dim);
   line-height: 1.5;
+}
+
+/* ---------------------------------------------------------- price chart -- */
+
+.pchart { display: flex; flex-direction: column; height: 100%; min-height: 300px; }
+
+.pchart__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+  flex: 0 0 auto;
+}
+
+.pchart__intervals { display: flex; gap: 2px; }
+.pchart__iv {
+  background: var(--panel-2);
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 3px 9px;
+  font: 500 10px/1 var(--mono);
+  cursor: pointer;
+}
+.pchart__iv:hover { color: var(--text); }
+.pchart__iv--on {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.pchart__legend { display: flex; gap: 12px; flex-wrap: wrap; }
+.pchart__key {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font: 400 10px/1 var(--mono);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.pchart__dash {
+  width: 14px;
+  height: 0;
+  border-top-width: 1.5px;
+  flex: 0 0 auto;
+}
+
+/* Lightweight Charts needs a sized box; it fills this via autoSize. */
+.pchart__canvas { flex: 1 1 auto; min-height: 240px; width: 100%; }
+
+.pchart__err {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--down);
+}
+.pchart__note {
+  margin: 8px 0 0;
+  font-size: 10px;
+  color: var(--dim);
+  line-height: 1.5;
+  flex: 0 0 auto;
 }
 
 /* ----------------------------------------------------------------- bias -- */

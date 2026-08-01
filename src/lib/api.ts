@@ -131,6 +131,28 @@ export interface Snapshot {
   darkpool: unknown[] | null;
 }
 
+/** One OHLC bar. `time` is epoch SECONDS for intraday, "YYYY-MM-DD" for daily. */
+export interface Bar {
+  time: number | string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+export interface Bars {
+  bars: Bar[];
+  /** "mock" | "yahoo" | "unusual_whales" — the UI must be able to say which. */
+  source: string;
+  interval: string;
+  /** Caveat text: delayed, synthetic, or why a fallback served this. */
+  note: string;
+}
+
+export const INTERVALS = ["1m", "5m", "30m", "1h"] as const;
+export type Interval = (typeof INTERVALS)[number];
+
 export interface Health {
   ok: boolean;
   warm: string[];
@@ -154,6 +176,12 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   health: () => req<Health>("/api/health"),
   bias: (ticker: string) => req<Snapshot>(`/api/bias?ticker=${encodeURIComponent(ticker)}`),
+  /** Bars are a separate call from the snapshot on purpose — different refresh
+   *  cadence, far larger payload, and one slow feed must not block the board. */
+  bars: (ticker: string, interval: string, days = 5) =>
+    req<Bars>(
+      `/api/bars?ticker=${encodeURIComponent(ticker)}&interval=${encodeURIComponent(interval)}&days=${days}`
+    ),
   setTicker: (ticker: string) =>
     req<Snapshot>(`/api/ticker?ticker=${encodeURIComponent(ticker)}`, { method: "POST" }),
   refresh: (ticker: string) =>

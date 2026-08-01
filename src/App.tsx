@@ -4,6 +4,7 @@ import { ageSeconds, ageLabel, freshness } from "./lib/format";
 import { Panel, Empty } from "./components/Panel";
 import { TopBar } from "./components/TopBar";
 import { GexProfile } from "./components/GexProfile";
+import { PriceChart } from "./components/PriceChart";
 import { BiasPanel } from "./components/BiasPanel";
 import { LevelMap } from "./components/LevelMap";
 import { TrackRecord } from "./components/TrackRecord";
@@ -127,23 +128,32 @@ export default function App() {
       <main className="grid">
         <div className="grid__col">
           <Panel
-            title="Gamma exposure by strike"
-            subtitle={`${snap.ticker} · ${snap.gex.profile.length} strikes loaded`}
+            title="Price"
+            subtitle={`${snap.ticker} · our levels overlaid`}
             freshness={fresh}
             age={age}
             grow
           >
-            <GexProfile gex={snap.gex} />
+            <PriceChart gex={snap.gex} ticker={snap.ticker} />
           </Panel>
 
-          <Panel title="Level map" subtitle="high to low" freshness={fresh} age={age}>
-            <LevelMap rows={snap.level_map} spot={snap.gex.spot} />
+          <Panel
+            title="Gamma exposure by strike"
+            subtitle={`${snap.gex.profile.length} strikes loaded`}
+            freshness={fresh}
+            age={age}
+          >
+            <GexProfile gex={snap.gex} />
           </Panel>
         </div>
 
         <div className="grid__col">
-          <Panel title="Bias" subtitle={`confirmed vs ${snap.confirmer}`} freshness={fresh} age={age} grow>
+          <Panel title="Bias" subtitle={`confirmed vs ${snap.confirmer}`} freshness={fresh} age={age}>
             <BiasPanel bias={snap.bias} />
+          </Panel>
+
+          <Panel title="Level map" subtitle="high to low" freshness={fresh} age={age}>
+            <LevelMap rows={snap.level_map} spot={snap.gex.spot} />
           </Panel>
 
           <Panel title="Track record" subtitle={snap.track?.ticker} freshness={fresh} age={age}>

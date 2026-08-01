@@ -72,6 +72,162 @@ def get_ohlc(ticker: str, date_iso: str) -> dict | None:
             "note": "[FULL DAY - intraday unavailable]"}
 
 
+# ----------------------------------------------------------------------------
+# PRICE BARS (for the chart)
+# ----------------------------------------------------------------------------
+# Lightweight Charts wants epoch SECONDS for intraday series and a "YYYY-MM-DD"
+# string for daily ones. Both are produced here rather than in the frontend, so
+# there is exactly one place that knows the convention.
+
+_INTRADAY = {"1m": 60, "5m": 300, "15m": 900, "30m": 1800, "1h": 3600}
+
+
+def get_bars(ticker: str, interval: str = "5m", lookback_days: int = 5) -> dict:
+    """
+    OHLC bars for the price chart.
+
+    Returns {"bars": [...], "source", "interval", "note"}. `source` is always
+    reported so the UI can say whether a candle came from a paid real-time feed
+    or a delayed free one — those are different claims about the same number.
+
+    Never raises for a data problem: an empty list with a `note` lets the panel
+    render an honest empty state instead of taking the whole screen down.
+    """
+    ticker = (ticker or config.PRIMARY_TICKER).upper()
+    if config.USE_MOCK_DATA:
+        return _mock_bars(ticker, interval, lookback_days)
+    if config.PROVIDER == "uw":
+        try:
+            return _uw_bars(ticker, interval, lookback_days)
+        except Exception as e:
+            # Degrade to the free path rather than blanking the chart, and say
+            # in `note` that this is the fallback, not the tier you paid for.
+            out = _yahoo_bars(ticker, interval, lookback_days)
+            out["note"] = f"UW unavailable ({e}); showing Yahoo".strip()
+            return out
+    return _yahoo_bars(ticker, interval, lookback_days)
+
+
+def _mock_bars(ticker: str, interval: str, lookback_days: int) -> dict:
+    """
+    A deterministic synthetic walk that ENDS EXACTLY AT THE MOCK SPOT.
+
+    That endpoint constraint is the whole point. The GEX levels, the walls and
+    the bias are all computed off `_mock_spot`, so a chart that drifted to some
+    other last price would render the walls on the wrong side of the candles
+    and make correct code look broken. The walk is generated freely, then
+    shifted so its final close lands on spot — the shape stays random, the
+    anchor does not.
+    """
+    import math
+    import random as _r
+    from data.mock_data import _mock_spot
+
+    step = _INTRADAY.get(interval, 300)
+    spot = _mock_spot(ticker)
+    # ~6.5h of RTH per day, capped so the payload stays small on 1m.
+    n = min(int(lookback_days * 6.5 * 3600 / step), 900)
+    if n < 2:
+        n = 2
+
+    rng = _r.Random(hash((ticker, interval, lookback_days)) & 0xFFFFFFFF)
+    # Per-bar sigma scaled off a ~0.8% daily move, so 1m and 30m bars look
+    # like themselves rather than like the same series at different zooms.
+    sigma = spot * 0.008 * math.sqrt(step / (6.5 * 3600))
+
+    closes = []
+    px = spot
+    for _ in range(n):
+        px += rng.gauss(0, sigma)
+        closes.append(px)
+    drift = closes[-1] - spot
+    closes = [c - drift for c in closes]          # land exactly on spot
+
+    now = int(dt.datetime.now(dt.timezone.utc).timestamp())
+    t0 = now - (now % step) - (n - 1) * step
+
+    bars, prev = [], closes[0] - rng.gauss(0, sigma)
+    for i, c in enumerate(closes):
+        o = prev
+        wick = abs(rng.gauss(0, sigma)) * 0.6
+        bars.append({
+            "time": t0 + i * step,
+            "open": round(o, 2),
+            "high": round(max(o, c) + wick, 2),
+            "low": round(min(o, c) - wick, 2),
+            "close": round(c, 2),
+            "volume": int(abs(rng.gauss(0, 1)) * 50_000 + 10_000),
+        })
+        prev = c
+    return {"bars": bars, "source": "mock", "interval": interval,
+            "note": "synthetic — anchored to the mock spot, not a market"}
+
+
+def _yahoo_bars(ticker: str, interval: str, lookback_days: int) -> dict:
+    import yfinance as yf
+
+    # Yahoo caps intraday history: 1m to ~7d, other intraday to ~60d.
+    cap = 7 if interval == "1m" else 60
+    days = max(1, min(lookback_days, cap))
+    try:
+        h = yf.Ticker(ticker).history(
+            period=f"{days}d", interval=interval, prepost=False)
+    except Exception as e:
+        return {"bars": [], "source": "yahoo", "interval": interval,
+                "note": f"fetch failed: {e}"}
+    if h is None or len(h) == 0:
+        return {"bars": [], "source": "yahoo", "interval": interval,
+                "note": "no bars returned"}
+
+    # Zero-volume extended-hours prints carry nonsense highs and lows — the
+    # same phantom-bar problem that put the overnight low 5% off reality.
+    if "Volume" in h:
+        h = h[h["Volume"] > 0]
+
+    daily = interval not in _INTRADAY
+    bars = []
+    for idx, row in h.iterrows():
+        t = idx.strftime("%Y-%m-%d") if daily else int(idx.timestamp())
+        bars.append({
+            "time": t,
+            "open": round(float(row["Open"]), 2),
+            "high": round(float(row["High"]), 2),
+            "low": round(float(row["Low"]), 2),
+            "close": round(float(row["Close"]), 2),
+            "volume": int(row.get("Volume", 0) or 0),
+        })
+    return {"bars": bars, "source": "yahoo", "interval": interval,
+            "note": "~15-min delayed"}
+
+
+def _uw_bars(ticker: str, interval: str, lookback_days: int) -> dict:
+    """UW candle sizes are named differently ('1h', '1d', '5m' ...)."""
+    from data import unusual_whales as uw
+
+    rows = uw.ohlc(ticker, candle_size=interval, limit=1000)
+    daily = interval not in _INTRADAY
+    bars = []
+    for r in rows:
+        # UW returns numbers as JSON STRINGS on many endpoints; coercing here
+        # keeps that quirk from leaking into the chart as NaN candles.
+        try:
+            stamp = r.get("start_time") or r.get("timestamp") or r.get("date")
+            o, h_, l_, c = (float(r["open"]), float(r["high"]),
+                            float(r["low"]), float(r["close"]))
+        except (KeyError, TypeError, ValueError):
+            continue
+        if daily:
+            t = str(stamp)[:10]
+        else:
+            t = int(dt.datetime.fromisoformat(str(stamp).replace("Z", "+00:00")).timestamp())
+        bars.append({"time": t, "open": round(o, 2), "high": round(h_, 2),
+                     "low": round(l_, 2), "close": round(c, 2),
+                     "volume": int(float(r.get("volume", 0) or 0))})
+    bars.sort(key=lambda b: b["time"])
+    return {"bars": bars, "source": "unusual_whales", "interval": interval,
+            "note": "" if bars else "no bars returned"}
+
+
 def get_market(ticker: str = None) -> dict:
     ticker = (ticker or config.PRIMARY_TICKER).upper()
     if config.USE_MOCK_DATA:
