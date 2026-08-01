@@ -35,7 +35,8 @@ import config
 from pipeline import build_snapshot
 from logging_obsidian import log_to_obsidian
 from analysis import tracker
-from data import news_feed
+from analysis import sessions
+from data import flow, news_feed
 from data.data_sources import get_ohlc, get_bars
 
 DEFAULT_PORT = 8765
@@ -161,6 +162,30 @@ def api_news(ticker: str = None, sort: str = "relevance", limit: int = 60,
     t = (ticker or _active["ticker"]).upper()
     return JSONResponse(news_feed.fetch_news_cached(
         t, limit=limit, sort=sort, ttl=NEWS_TTL, force=refresh))
+
+
+@app.get("/api/sessions")
+def api_sessions():
+    """Market session clock. Cheap and pure — no cache, no upstream."""
+    return sessions.state()
+
+
+@app.get("/api/flow")
+def api_flow(ticker: str = None, limit: int = 100):
+    """
+    Options order flow.
+
+    Reads spot from the cached snapshot rather than re-pulling the chain: the
+    scanner refreshes far more often than positioning does, and a flow request
+    should never trigger a chain fetch.
+    """
+    t = (ticker or _active["ticker"]).upper()
+    with _lock:
+        snap = _latest.get(t)
+    spot = (snap or {}).get("gex", {}).get("spot")
+    if spot is None:
+        spot = refresh(t)["gex"]["spot"]
+    return JSONResponse(flow.get_flow(t, spot, limit=limit))
 
 
 @app.get("/api/news/sources")

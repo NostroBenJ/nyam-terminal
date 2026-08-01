@@ -29,41 +29,50 @@ enum EngineKind {
     Source(std::path::PathBuf),
 }
 
-/// Locate the engine, preferring a bundled binary over the source tree.
-///
-/// Order matters. A packaged install must never silently fall through to a
-/// developer's checkout — it would run different code than was shipped, and
-/// the difference would only show up as numbers that don't match.
-fn find_engine(app: &tauri::AppHandle) -> Option<EngineKind> {
-    let exe_name = if cfg!(windows) { "nyam-engine.exe" } else { "nyam-engine" };
-
-    // 1. Packaged: bundled as a Tauri resource.
-    if let Ok(res) = app.path().resource_dir() {
-        let dir = res.join("engine");
-        if dir.join(exe_name).exists() {
-            return Some(EngineKind::Bundled(dir));
+/// Find the source tree by walking up from the running executable.
+fn source_dir() -> Option<std::path::PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    for up in [3usize, 4, 5] {
+        let mut p = exe.clone();
+        for _ in 0..up {
+            p.pop();
         }
-    }
-
-    // 2. Dev: walk up from the executable to the project root.
-    if let Ok(exe) = std::env::current_exe() {
-        for up in [3usize, 4, 5] {
-            let mut p = exe.clone();
-            for _ in 0..up {
-                p.pop();
-            }
-            let engine = p.join("engine");
-            // A locally built binary still beats invoking Python.
-            let built = engine.join("dist").join("nyam-engine");
-            if built.join(exe_name).exists() {
-                return Some(EngineKind::Bundled(built));
-            }
-            if engine.join("server.py").exists() {
-                return Some(EngineKind::Source(engine));
-            }
+        let engine = p.join("engine");
+        if engine.join("server.py").exists() {
+            return Some(engine);
         }
     }
     None
+}
+
+fn bundled_dir(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
+    let exe_name = if cfg!(windows) { "nyam-engine.exe" } else { "nyam-engine" };
+    let dir = app.path().resource_dir().ok()?.join("engine");
+    dir.join(exe_name).exists().then_some(dir)
+}
+
+/// Locate the engine. Which one wins DEPENDS ON THE BUILD, and getting this
+/// backwards is expensive in both directions:
+///
+/// - In a RELEASE build, bundled must win. A packaged install falling through
+///   to a developer's checkout would run different code than was shipped, and
+///   the only symptom would be numbers that don't match.
+/// - In a DEBUG build, source must win. Tauri copies bundled resources into
+///   `target/debug/` during `tauri dev`, so preferring bundled means your
+///   source edits silently do nothing while a stale binary serves the old API.
+///   (Observed: two new endpoints 404'd against an engine built 13 minutes
+///   before the code that added them.)
+fn find_engine(app: &tauri::AppHandle) -> Option<EngineKind> {
+    if cfg!(debug_assertions) {
+        if let Some(d) = source_dir() {
+            return Some(EngineKind::Source(d));
+        }
+        return bundled_dir(app).map(EngineKind::Bundled);
+    }
+    if let Some(d) = bundled_dir(app) {
+        return Some(EngineKind::Bundled(d));
+    }
+    source_dir().map(EngineKind::Source)
 }
 
 /// Resolve the *real* interpreter path.

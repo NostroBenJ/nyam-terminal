@@ -12,6 +12,8 @@ import { LevelMap } from "./components/LevelMap";
 import { TrackRecord } from "./components/TrackRecord";
 import { NewsRail } from "./components/NewsRail";
 import { EventRisk } from "./components/EventRisk";
+import { SessionClock } from "./components/SessionClock";
+import { FlowScanner } from "./components/FlowScanner";
 import { loadUi, saveUi } from "./lib/persist";
 import "./styles/tokens.css";
 import "./styles/app.css";
@@ -175,6 +177,9 @@ export default function App() {
                   </Panel>
                 </div>
                 <div className="grid__col">
+                  <Panel title="Session" subtitle="where you are in the day">
+                    <SessionClock compact />
+                  </Panel>
                   <Panel title="Bias" subtitle={`confirmed vs ${snap.confirmer}`} {...panelProps}>
                     <BiasPanel bias={snap.bias} />
                   </Panel>
@@ -250,6 +255,28 @@ export default function App() {
                       </tbody>
                     </table>
                     <p className="disclaimer">{snap.plan?.bias_note}</p>
+                  </Panel>
+                </div>
+              </div>
+            )}
+
+            {section === "flow" && (
+              <div className="grid">
+                <div className="grid__col">
+                  <Panel
+                    title="Flow scanner"
+                    subtitle={`${snap.ticker} · every print, filterable`}
+                    grow
+                  >
+                    <FlowScanner ticker={snap.ticker} />
+                  </Panel>
+                </div>
+                <div className="grid__col">
+                  <Panel title="Session" subtitle="where you are in the day">
+                    <SessionClock />
+                  </Panel>
+                  <Panel title="Level map" subtitle="high to low" {...panelProps}>
+                    <LevelMap rows={snap.level_map} spot={snap.gex.spot} />
                   </Panel>
                 </div>
               </div>

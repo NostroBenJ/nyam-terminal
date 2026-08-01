@@ -211,6 +211,58 @@ export interface News {
   cached: boolean;
 }
 
+export interface Sessions {
+  now_et: string;
+  date: string;
+  weekday: string;
+  trading_day: boolean;
+  /** Why the market is shut — "Weekend" and "Thanksgiving" are different. */
+  closed_reason: string | null;
+  early_close: string | null;
+  early_close_name: string | null;
+  phase: "open" | "pre" | "closed";
+  minutes_until: number | null;
+  until_label: string | null;
+  sessions: Array<{
+    id: string; label: string; kind: string; active: boolean;
+    start: string; end: string;
+  }>;
+  windows: Array<{
+    id: string; label: string; active: boolean; note: string;
+    start: string; end: string;
+  }>;
+  my_window: { active: boolean; start: string; end: string; note: string };
+}
+
+export interface FlowRow {
+  at: string;
+  ticker: string;
+  right: "C" | "P";
+  spot: number;
+  strike: number;
+  expiry: string;
+  dte: number | null;
+  size: number;
+  price: number;
+  premium: number;
+  trade_type: string;
+  side: string;
+  sentiment: "BULLISH" | "BEARISH" | "NEUTRAL" | string;
+  volume: number | null;
+  open_interest: number | null;
+  vol_oi: number | null;
+  /** True for synthetic scaffold rows. Never mistakable for a real print. */
+  mock: boolean;
+}
+
+export interface Flow {
+  rows: FlowRow[];
+  source: "mock" | "unusual_whales" | string;
+  /** False means these are not real prints — the UI must say so loudly. */
+  available: boolean;
+  note: string;
+}
+
 export interface Health {
   ok: boolean;
   warm: string[];
@@ -240,6 +292,9 @@ export const api = {
     req<Bars>(
       `/api/bars?ticker=${encodeURIComponent(ticker)}&interval=${encodeURIComponent(interval)}&days=${days}`
     ),
+  sessions: () => req<Sessions>("/api/sessions"),
+  flow: (ticker: string, limit = 100) =>
+    req<Flow>(`/api/flow?ticker=${encodeURIComponent(ticker)}&limit=${limit}`),
   news: (ticker: string, sort = "relevance", refresh = false) =>
     req<News>(
       `/api/news?ticker=${encodeURIComponent(ticker)}&sort=${sort}${refresh ? "&refresh=true" : ""}`

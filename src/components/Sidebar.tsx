@@ -21,8 +21,10 @@ export interface Section {
 export const SECTIONS: Section[] = [
   { id: "board", label: "Board", glyph: "▤", hint: "Price, gamma, bias — the morning read" },
   { id: "gamma", label: "Gamma", glyph: "⌗", hint: "Dealer positioning by strike" },
-  { id: "flow", label: "Flow", glyph: "⇄", hint: "Options order flow scanner",
-    blocked: "Needs an Unusual Whales key" },
+  // No longer blocked: the scanner is built and runs on synthetic rows, which
+  // are labelled as such. Leaving it disabled would have hidden finished work
+  // behind a key that hasn't arrived.
+  { id: "flow", label: "Flow", glyph: "⇄", hint: "Options order flow scanner" },
   { id: "news", label: "News", glyph: "◈", hint: "Market-moving headlines" },
   { id: "journal", label: "Journal", glyph: "✓", hint: "Graded calls and hit rate" },
   { id: "sources", label: "Sources", glyph: "⚙", hint: "Feeds, providers, and what's live" },
