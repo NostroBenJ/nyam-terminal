@@ -13,7 +13,13 @@ venv/
 .env.*
 !.env.example
 
-# local data
+# PyInstaller output. engine.spec IS source and stays tracked.
+engine/build/
+engine/dist/
+
+# local data — includes engine/data_store/oi/, the daily OI snapshots.
+# Those are irreplaceable (OI history can't be fetched retroactively) but they
+# are yours, not the repo's. Back them up separately if you care about them.
 data_store/
 *.csv
 *.log

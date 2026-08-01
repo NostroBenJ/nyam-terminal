@@ -21,31 +21,49 @@ const ENGINE_PORT: u16 = 8765;
 /// Handle to the spawned engine, so the exit hook can kill it.
 struct Engine(Mutex<Option<Child>>);
 
-/// Where the engine lives relative to the running binary.
+/// How the engine will be started.
+enum EngineKind {
+    /// A PyInstaller build shipped alongside the app. No Python required.
+    Bundled(std::path::PathBuf),
+    /// `python server.py` from the source tree, for development.
+    Source(std::path::PathBuf),
+}
+
+/// Locate the engine, preferring a bundled binary over the source tree.
 ///
-/// In `tauri dev` the binary sits in `src-tauri/target/debug`, so the engine is
-/// four levels up. A packaged build ships the engine as a bundled resource
-/// instead; that path is resolved separately once packaging is wired.
-fn engine_dir(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
-    // Dev: walk up from the executable to the project root.
+/// Order matters. A packaged install must never silently fall through to a
+/// developer's checkout — it would run different code than was shipped, and
+/// the difference would only show up as numbers that don't match.
+fn find_engine(app: &tauri::AppHandle) -> Option<EngineKind> {
+    let exe_name = if cfg!(windows) { "nyam-engine.exe" } else { "nyam-engine" };
+
+    // 1. Packaged: bundled as a Tauri resource.
+    if let Ok(res) = app.path().resource_dir() {
+        let dir = res.join("engine");
+        if dir.join(exe_name).exists() {
+            return Some(EngineKind::Bundled(dir));
+        }
+    }
+
+    // 2. Dev: walk up from the executable to the project root.
     if let Ok(exe) = std::env::current_exe() {
         for up in [3usize, 4, 5] {
             let mut p = exe.clone();
             for _ in 0..up {
                 p.pop();
             }
-            let candidate = p.join("engine");
-            if candidate.join("server.py").exists() {
-                return Some(candidate);
+            let engine = p.join("engine");
+            // A locally built binary still beats invoking Python.
+            let built = engine.join("dist").join("nyam-engine");
+            if built.join(exe_name).exists() {
+                return Some(EngineKind::Bundled(built));
+            }
+            if engine.join("server.py").exists() {
+                return Some(EngineKind::Source(engine));
             }
         }
     }
-    // Packaged: engine shipped as a resource directory.
-    app.path()
-        .resource_dir()
-        .ok()
-        .map(|r| r.join("engine"))
-        .filter(|p| p.join("server.py").exists())
+    None
 }
 
 /// Resolve the *real* interpreter path.
@@ -75,31 +93,40 @@ fn resolve_python() -> String {
 }
 
 fn spawn_engine(app: &tauri::AppHandle) -> Option<Child> {
-    let dir = match engine_dir(app) {
-        Some(d) => d,
+    let kind = match find_engine(app) {
+        Some(k) => k,
         None => {
             // Not fatal. The frontend polls /api/health and shows an explicit
             // "engine unreachable" screen, which is more useful than a panic
             // and lets a manually started engine still be picked up.
-            eprintln!("[shell] engine directory not found; expecting a manually started engine");
+            eprintln!("[shell] no engine found; expecting a manually started one");
             return None;
         }
     };
 
-    let python = resolve_python();
-    match Command::new(&python)
-        .arg("server.py")
-        .arg("--port")
-        .arg(ENGINE_PORT.to_string())
-        .current_dir(&dir)
-        .spawn()
-    {
+    let (mut cmd, dir, how) = match kind {
+        EngineKind::Bundled(dir) => {
+            let exe = dir.join(if cfg!(windows) { "nyam-engine.exe" } else { "nyam-engine" });
+            let mut c = Command::new(&exe);
+            c.current_dir(&dir);
+            (c, dir, "bundled".to_string())
+        }
+        EngineKind::Source(dir) => {
+            let python = resolve_python();
+            let mut c = Command::new(&python);
+            c.arg("server.py").current_dir(&dir);
+            (c, dir, format!("source via {python}"))
+        }
+    };
+    cmd.arg("--port").arg(ENGINE_PORT.to_string());
+
+    match cmd.spawn() {
         Ok(child) => {
-            println!("[shell] engine pid {} ({}) in {}", child.id(), python, dir.display());
+            println!("[shell] engine pid {} ({}) in {}", child.id(), how, dir.display());
             Some(child)
         }
         Err(e) => {
-            eprintln!("[shell] failed to spawn engine ({python} server.py): {e}");
+            eprintln!("[shell] failed to spawn engine ({how}): {e}");
             None
         }
     }
