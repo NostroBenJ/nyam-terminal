@@ -11,21 +11,29 @@ import { BiasPanel } from "./components/BiasPanel";
 import { LevelMap } from "./components/LevelMap";
 import { TrackRecord } from "./components/TrackRecord";
 import { NewsRail } from "./components/NewsRail";
+import { EventRisk } from "./components/EventRisk";
+import { loadUi, saveUi } from "./lib/persist";
 import "./styles/tokens.css";
 import "./styles/app.css";
 
 const POLL_MS = 60_000;
 
 export default function App() {
+  const [ui] = useState(loadUi);
   const [health, setHealth] = useState<Health | null>(null);
   const [snap, setSnap] = useState<Snapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [section, setSection] = useState<SectionId>("board");
+  const [section, setSection] = useState<SectionId>(ui.section as SectionId);
   /** Ticks so the age chip decays on screen even when no fetch is running. */
   const [, tick] = useState(0);
-  const active = useRef<string>("SPY");
+  const active = useRef<string>(ui.ticker);
   const reduceMotion = useReducedMotion();
+
+  const goSection = useCallback((id: SectionId) => {
+    setSection(id);
+    saveUi({ section: id });
+  }, []);
 
   // Wait for the sidecar before the first fetch. The window can paint before
   // the engine's port is open, so an early failure is a race, not an outage.
@@ -35,9 +43,10 @@ export default function App() {
       .then(async (h) => {
         if (cancelled) return;
         setHealth(h);
-        const t = h.warm[0] ?? "SPY";
+        // Prefer the ticker you were last on over whatever the engine warmed.
+        const t = active.current || h.warm[0] || "SPY";
         active.current = t;
-        const s = await api.bias(t);
+        const s = await api.setTicker(t);
         if (!cancelled) setSnap(s);
       })
       .catch((e) => {
@@ -65,6 +74,7 @@ export default function App() {
   const onTicker = useCallback(
     (t: string) => {
       active.current = t;
+      saveUi({ ticker: t });
       void load(() => api.setTicker(t));
     },
     [load]
@@ -93,13 +103,13 @@ export default function App() {
         const s = SECTIONS[n - 1];
         if (!s.blocked) {
           e.preventDefault();
-          setSection(s.id);
+          goSection(s.id);
         }
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [goSection]);
 
   if (error && !snap) {
     return (
@@ -143,7 +153,7 @@ export default function App() {
       )}
 
       <div className="shell">
-        <Sidebar active={section} onSelect={setSection} />
+        <Sidebar active={section} onSelect={goSection} />
 
         <AnimatePresence mode="wait">
           <motion.main
@@ -167,6 +177,9 @@ export default function App() {
                 <div className="grid__col">
                   <Panel title="Bias" subtitle={`confirmed vs ${snap.confirmer}`} {...panelProps}>
                     <BiasPanel bias={snap.bias} />
+                  </Panel>
+                  <Panel title="Event risk" subtitle="what News Risk is reading" {...panelProps}>
+                    <EventRisk news={snap.news} />
                   </Panel>
                   <Panel title="Headlines" subtitle={snap.ticker}>
                     <NewsRail ticker={snap.ticker} compact />

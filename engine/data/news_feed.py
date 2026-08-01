@@ -360,6 +360,37 @@ def fetch_news(ticker: str | None = None, limit: int = 60,
     }
 
 
+# ---------------------------------------------------------------------------
+# caching
+# ---------------------------------------------------------------------------
+# One cache, module-level, shared by the HTTP layer and the snapshot pipeline.
+# They both want the same 12 feeds within seconds of each other, and two
+# independent caches would double the load on servers giving us this for free.
+DEFAULT_TTL = 180
+_cache: dict = {}
+_cache_lock = __import__("threading").Lock()
+
+
+def fetch_news_cached(ticker: str | None = None, limit: int = 60,
+                      sort: str = "relevance", ttl: int = DEFAULT_TTL,
+                      force: bool = False) -> dict:
+    """`fetch_news` behind a TTL cache. Adds `cached` so callers can say so."""
+    import time as _t
+
+    key = ((ticker or "").upper(), sort, limit)
+    now = _t.time()
+    with _cache_lock:
+        hit = _cache.get(key)
+        if hit and not force and now - hit["_wall"] < ttl:
+            return {**hit, "cached": True}
+
+    data = fetch_news(ticker, limit=limit, sort=sort)
+    data["_wall"] = now
+    with _cache_lock:
+        _cache[key] = data
+    return {**data, "cached": False}
+
+
 if __name__ == "__main__":                               # quick manual probe
     import json
     import sys

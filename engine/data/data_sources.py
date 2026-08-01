@@ -297,13 +297,29 @@ def _uw_market(ticker: str) -> dict:
 def _live_market(ticker: str) -> dict:
     import yfinance as yf
 
+    from data import oi_store
+
     confirmer = config.confirmer_for(ticker)
     primary = _live_ticker(yf, ticker, with_chain=True)
     secondary = _live_ticker(yf, confirmer, with_chain=False)
+
+    # Day-over-day OI is the one thing the free path can't fetch — so store it
+    # ourselves. Snapshot first (today's chain, written once), then diff against
+    # the previous session to fill oi_change, which was otherwise stuck at 0.
+    oi_report = {"available": False, "note": "no chain loaded"}
+    if primary.get("expiries"):
+        try:
+            oi_store.snapshot(ticker, primary["expiries"])
+            oi_report = oi_store.apply_oi_change(ticker, primary["expiries"])
+        except Exception as e:                    # never let storage break a load
+            oi_report = {"available": False,
+                         "note": f"OI snapshot failed ({type(e).__name__}: {e})"}
+
     return {
         "primary": primary,
         "secondary": secondary,
         "news": _live_news(yf, ticker),
+        "oi_report": oi_report,
     }
 
 

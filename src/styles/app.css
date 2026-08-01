@@ -115,6 +115,29 @@ code {
 .btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
 .btn:disabled { opacity: .5; cursor: default; }
 
+/* ---------------------------------------------------------------- flash -- */
+
+/* The only animation on live data: a brief tint so a change registers
+   peripherally. Nothing moves or counts up — you read a price, you don't
+   watch it arrive. */
+.flash {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 1px 3px;
+  margin: -1px -3px;
+  border-radius: 2px;
+  transition: background-color .45s ease-out, color .45s ease-out;
+}
+.flash--up   { background: var(--up-soft);   color: var(--up); }
+.flash--down { background: var(--down-soft); color: var(--down); }
+.flash__arrow { font-size: 8px; line-height: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  .flash { transition: none; }
+  .flash--up, .flash--down { background: transparent; }
+}
+
 /* ------------------------------------------------------------- chips/age -- */
 
 .chip {
@@ -509,6 +532,18 @@ code {
 
 .track__rule { margin: 0; font-size: 10px; color: var(--dim); }
 .track__mixed { color: var(--accent); }
+
+/* ----------------------------------------------------------- event risk -- */
+
+.erisk__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.erisk__window, .erisk__kind { font: 400 9px/1 var(--mono); color: var(--dim); }
+.erisk__kind { border: 1px solid var(--line); border-radius: var(--radius); padding: 2px 5px; }
+.erisk__why { margin: 0 0 10px; font-size: 11.5px; line-height: 1.55; color: var(--muted); }
+.erisk__degraded {
+  margin: 8px 0 0;
+  font-size: 10px;
+  color: var(--accent);
+}
 
 /* ----------------------------------------------------------------- news -- */
 

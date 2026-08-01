@@ -13,6 +13,7 @@ import {
 import { api, INTERVALS, type Gex, type Interval } from "../lib/api";
 import { tokens } from "../lib/tokens";
 import { price } from "../lib/format";
+import { loadUi, saveUi } from "../lib/persist";
 
 /**
  * Price candles with our own dealer-gamma levels drawn on them.
@@ -44,7 +45,13 @@ export function PriceChart({ gex, ticker }: { gex: Gex; ticker: string }) {
   /** Level prices the autoscale provider must keep in frame. */
   const levelPrices = useRef<number[]>([]);
 
-  const [interval, setInterval] = useState<Interval>("5m");
+  const [interval, setIntervalState] = useState<Interval>(
+    () => (loadUi().interval as Interval) || "5m"
+  );
+  const setInterval = (iv: Interval) => {
+    setIntervalState(iv);
+    saveUi({ interval: iv });
+  };
   const [meta, setMeta] = useState<{ source: string; note: string; n: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
 

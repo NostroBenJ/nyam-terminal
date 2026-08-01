@@ -117,7 +117,35 @@ export interface Snapshot {
   smt: { signal: string; lean: number; note: string };
   bias: Bias;
   brief: string;
-  news: { high_impact: boolean; headline: string; items: Array<{ time: string; event: string; impact: string }> };
+  /** Event risk. `kind: "landed"` means news that already published — this is
+   *  NOT a forward calendar, and the two call for opposite trades. */
+  news: {
+    high_impact: boolean;
+    headline: string;
+    items: Array<{ time: string; event: string; impact: string }>;
+    kind?: "landed" | "unavailable" | string;
+    level?: "high" | "medium" | "none" | "unknown" | string;
+    why?: string;
+    window_hours?: number;
+    drivers?: Array<{
+      event: string;
+      impact: string;
+      source: string;
+      title: string;
+      age_hours: number;
+      primary: boolean;
+    }>;
+    headlines?: Array<{
+      title: string;
+      source: string;
+      age_hours: number | null;
+      tier: string;
+      link: string;
+    }>;
+    feed_errors?: Record<string, string>;
+    feed_count?: number;
+    error?: string;
+  };
   track: TrackRecord;
   plan: {
     regime: string;

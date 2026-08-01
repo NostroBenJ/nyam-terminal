@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, type News, type NewsItem } from "../lib/api";
 import { Empty } from "./Panel";
+import { loadUi, saveUi } from "../lib/persist";
 
 /**
  * The news rail.
@@ -51,7 +52,13 @@ export function NewsRail({ ticker, compact }: { ticker: string; compact?: boolea
   const [news, setNews] = useState<News | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [sort, setSort] = useState<"relevance" | "latest">("relevance");
+  const [sort, setSortState] = useState<"relevance" | "latest">(
+    () => loadUi().newsSort
+  );
+  const setSort = (s: "relevance" | "latest") => {
+    setSortState(s);
+    saveUi({ newsSort: s });
+  };
   const [onlyRelevant, setOnlyRelevant] = useState(false);
 
   const load = useCallback(

@@ -1,5 +1,6 @@
 import type { Snapshot } from "../lib/api";
 import { money, price, pct, ageLabel, freshness, type Freshness } from "../lib/format";
+import { Flash } from "./Flash";
 
 /**
  * Ticker, spot, and the top-line positioning read.
@@ -46,12 +47,18 @@ export function TopBar({
         ))}
       </select>
 
-      <Stat label="spot" value={price(g.spot)} />
-      <Stat
-        label="net gex"
-        value={money(g.net_gex)}
-        cls={g.net_gex >= 0 ? "up" : "down"}
-      />
+      <div className="stat">
+        <span className="stat__label">spot</span>
+        <span className="stat__value num">
+          <Flash value={g.spot} format={(v) => price(v)} />
+        </span>
+      </div>
+      <div className="stat">
+        <span className="stat__label">net gex</span>
+        <span className={`stat__value num stat__value--${g.net_gex >= 0 ? "up" : "down"}`}>
+          <Flash value={g.net_gex} format={(v) => money(v)} showArrow={false} />
+        </span>
+      </div>
       <div className="stat">
         <span className="stat__label">regime</span>
         <span className={`chip chip--${g.regime === "positive" ? "up" : "down"}`}>

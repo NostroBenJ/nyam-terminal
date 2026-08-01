@@ -49,6 +49,48 @@ def _cross_check(gex: dict, uw_levels: dict, tol: float = 0.004) -> list | None:
     return out
 
 
+def _news_for(ticker: str, market: dict) -> dict:
+    """
+    Resolve the news/event-risk input the bias engine reads.
+
+    In MOCK MODE this stays on the synthetic calendar — mock is meant to run
+    offline with no keys and no cost, and quietly reaching the network there
+    would break that promise.
+
+    Live, it reads the real feeds. Before this, `_live_news` hardcoded
+    `high_impact: False`, so the News Risk signal could never fire outside mock
+    — the panel was written, the reason text existed, and the path was dead.
+    A failure here degrades to "no known event risk" AND says so, because
+    silently reporting a calm tape when the feed is down is the dangerous
+    direction to be wrong in.
+    """
+    if config.USE_MOCK_DATA:
+        return market.get("news") or {"high_impact": False, "headline": "", "items": []}
+
+    from analysis import news_risk
+    from data import news_feed
+
+    try:
+        feed = news_feed.fetch_news_cached(ticker, limit=80)
+    except Exception as e:
+        return {"high_impact": False, "headline": "",
+                "items": [], "kind": "unavailable", "level": "unknown",
+                "why": f"News feed unavailable ({type(e).__name__}) — event risk "
+                       f"is UNKNOWN, not absent.",
+                "error": str(e)}
+
+    risk = news_risk.assess(feed.get("items", []))
+    risk["feed_errors"] = feed.get("errors", {})
+    risk["feed_count"] = len(feed.get("sources", {}))
+    # Headlines the UI can show beside the signal that used them.
+    risk["headlines"] = [
+        {"title": i["title"], "source": i["source"], "age_hours": i["age_hours"],
+         "tier": i["tier"], "link": i["link"]}
+        for i in feed.get("items", [])[:8]
+    ]
+    return risk
+
+
 def build_snapshot(ticker: str = None) -> dict:
     market = get_market(ticker)
     p, s = market["primary"], market["secondary"]
@@ -92,8 +134,9 @@ def build_snapshot(ticker: str = None) -> dict:
          "on_is_real": s.get("on_is_real", True)},
     )
 
-    bias = bias_engine.build_bias(gex, levels, smt, market["news"], em=em, neg_zone=neg_zone)
-    brief = generate_brief(bias, gex, levels, smt, market["news"])
+    news = _news_for(p["ticker"], market)
+    bias = bias_engine.build_bias(gex, levels, smt, news, em=em, neg_zone=neg_zone)
+    brief = generate_brief(bias, gex, levels, smt, news)
 
     # --- the actionable layer ----------------------------------------------
     grid = matrix.build(per_expiry, p["spot"])
@@ -131,6 +174,6 @@ def build_snapshot(ticker: str = None) -> dict:
         "smt": smt,
         "bias": bias,
         "brief": brief,
-        "news": market["news"],
+        "news": news,
         "track": track,
     }

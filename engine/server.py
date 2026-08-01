@@ -23,7 +23,6 @@ import datetime as dt
 import os
 import sys
 import threading
-import time
 
 import uvicorn
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -63,11 +62,9 @@ _running = {"on": True}                        # live-feed toggle
 _active = {"ticker": config.PRIMARY_TICKER}    # what the scheduler refreshes
 _lock = threading.Lock()
 
-# News is cached separately from the snapshot: different cadence, different
-# failure modes, and a slow wire must not hold up a GEX refresh.
+# News caching lives in news_feed so the snapshot pipeline shares one cache
+# with this HTTP layer rather than each pulling the same 12 feeds.
 NEWS_TTL = 180                                 # seconds
-_news_cache = {}                               # (ticker, sort, limit) -> payload
-_news_lock = threading.Lock()
 
 
 def refresh(ticker: str = None) -> dict:
@@ -162,18 +159,8 @@ def api_news(ticker: str = None, sort: str = "relevance", limit: int = 60,
     rude to servers that are giving us data for free. `refresh=true` forces it.
     """
     t = (ticker or _active["ticker"]).upper()
-    key = (t, sort, limit)
-    now = time.time()
-    with _news_lock:
-        hit = _news_cache.get(key)
-        if hit and not refresh and now - hit["fetched_wall"] < NEWS_TTL:
-            return JSONResponse({**hit, "cached": True})
-
-    data = news_feed.fetch_news(t, limit=limit, sort=sort)
-    data["fetched_wall"] = now
-    with _news_lock:
-        _news_cache[key] = data
-    return JSONResponse({**data, "cached": False})
+    return JSONResponse(news_feed.fetch_news_cached(
+        t, limit=limit, sort=sort, ttl=NEWS_TTL, force=refresh))
 
 
 @app.get("/api/news/sources")
