@@ -1,0 +1,19 @@
+# dependencies / build output
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# secrets — UW_API_KEY, ANTHROPIC_API_KEY live here, never in git
+.env
+.env.*
+!.env.example
+
+# local data
+data_store/
+*.csv
+*.log

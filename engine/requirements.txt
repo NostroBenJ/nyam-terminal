@@ -1,0 +1,19 @@
+# Core — needed always (mock mode runs on just these)
+fastapi>=0.115,<1.0
+uvicorn>=0.30,<1.0
+apscheduler>=3.10,<4.0
+
+# Live free data (NYAM_MOCK=0, NYAM_PROVIDER=yahoo)
+# Was pinned to 0.2.44 — years behind the 1.4.1 actually installed here, so
+# the pin was describing an environment nobody was running. yfinance changes
+# its own API between minor versions, so this floors at the 1.x line instead
+# of pinning exactly; if a data pull starts returning nonsense after an
+# upgrade, data/data_sources.py is the only file that touches it.
+yfinance>=1.4,<2.0
+
+# Claude brief + in-app chat (ANTHROPIC_API_KEY)
+# Was pinned to 0.39.0; chat.py uses messages.stream() with prompt caching.
+anthropic>=0.69,<1.0
+
+# Unusual Whales (NYAM_PROVIDER=uw, UW_API_KEY) needs no extra package —
+# data/unusual_whales.py uses urllib from the stdlib.
