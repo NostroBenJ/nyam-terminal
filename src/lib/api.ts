@@ -153,6 +153,36 @@ export interface Bars {
 export const INTERVALS = ["1m", "5m", "30m", "1h"] as const;
 export type Interval = (typeof INTERVALS)[number];
 
+export interface NewsItem {
+  title: string;
+  link: string;
+  summary: string;
+  /** Epoch seconds, or null — an undated item stays undated. */
+  published: number | null;
+  source: string;
+  source_id: string;
+  category: string;
+  tier: "primary" | "market" | "wire" | string;
+  macro_terms: string[];
+  ticker_match: boolean;
+  relevance: number;
+  age_hours: number | null;
+  /** relevance decayed by age — what the default ordering uses. */
+  rank: number;
+}
+
+export interface News {
+  items: NewsItem[];
+  sources: Record<string, { name: string; n: number; category: string; tier: string }>;
+  /** Per-feed failure reasons. Rendered, never swallowed. */
+  errors: Record<string, string>;
+  fetched_at: number;
+  ticker: string;
+  sort: string;
+  total_before_dedupe: number;
+  cached: boolean;
+}
+
 export interface Health {
   ok: boolean;
   warm: string[];
@@ -181,6 +211,10 @@ export const api = {
   bars: (ticker: string, interval: string, days = 5) =>
     req<Bars>(
       `/api/bars?ticker=${encodeURIComponent(ticker)}&interval=${encodeURIComponent(interval)}&days=${days}`
+    ),
+  news: (ticker: string, sort = "relevance", refresh = false) =>
+    req<News>(
+      `/api/news?ticker=${encodeURIComponent(ticker)}&sort=${sort}${refresh ? "&refresh=true" : ""}`
     ),
   setTicker: (ticker: string) =>
     req<Snapshot>(`/api/ticker?ticker=${encodeURIComponent(ticker)}`, { method: "POST" }),

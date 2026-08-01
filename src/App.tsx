@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { api, waitForEngine, type Health, type Snapshot } from "./lib/api";
 import { ageSeconds, ageLabel, freshness } from "./lib/format";
 import { Panel, Empty } from "./components/Panel";
 import { TopBar } from "./components/TopBar";
+import { Sidebar, SECTIONS, type SectionId } from "./components/Sidebar";
 import { GexProfile } from "./components/GexProfile";
 import { PriceChart } from "./components/PriceChart";
 import { BiasPanel } from "./components/BiasPanel";
 import { LevelMap } from "./components/LevelMap";
 import { TrackRecord } from "./components/TrackRecord";
+import { NewsRail } from "./components/NewsRail";
 import "./styles/tokens.css";
 import "./styles/app.css";
 
@@ -18,9 +21,11 @@ export default function App() {
   const [snap, setSnap] = useState<Snapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [section, setSection] = useState<SectionId>("board");
   /** Ticks so the age chip decays on screen even when no fetch is running. */
   const [, tick] = useState(0);
   const active = useRef<string>("SPY");
+  const reduceMotion = useReducedMotion();
 
   // Wait for the sidecar before the first fetch. The window can paint before
   // the engine's port is open, so an early failure is a race, not an outage.
@@ -72,12 +77,29 @@ export default function App() {
 
   useEffect(() => {
     const poll = setInterval(() => void load(() => api.bias(active.current)), POLL_MS);
-    const age = setInterval(() => tick((n) => n + 1), 5_000);
+    const ageTimer = setInterval(() => tick((n) => n + 1), 5_000);
     return () => {
       clearInterval(poll);
-      clearInterval(age);
+      clearInterval(ageTimer);
     };
   }, [load]);
+
+  // Ctrl/Cmd+1..6 jumps between sections — this is a keyboard tool.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const n = Number(e.key);
+      if (n >= 1 && n <= SECTIONS.length) {
+        const s = SECTIONS[n - 1];
+        if (!s.blocked) {
+          e.preventDefault();
+          setSection(s.id);
+        }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   if (error && !snap) {
     return (
@@ -103,6 +125,7 @@ export default function App() {
   const ageSec = ageSeconds(snap.generated_at);
   const fresh = freshness(ageSec);
   const age = ageLabel(ageSec);
+  const panelProps = { freshness: fresh, age };
 
   return (
     <div className="app">
@@ -118,82 +141,186 @@ export default function App() {
           Mock data. Every number on this screen is synthetic and reflects no live market.
         </div>
       )}
-      {health && !health.uw_key_set && !snap.mock && (
-        <div className="banner banner--quiet">
-          No Unusual Whales key set — running the free delayed path. Open-interest change,
-          flow alerts and dark pool prints are unavailable.
-        </div>
-      )}
 
-      <main className="grid">
-        <div className="grid__col">
-          <Panel
-            title="Price"
-            subtitle={`${snap.ticker} · our levels overlaid`}
-            freshness={fresh}
-            age={age}
-            grow
+      <div className="shell">
+        <Sidebar active={section} onSelect={setSection} />
+
+        <AnimatePresence mode="wait">
+          <motion.main
+            key={section}
+            className="view"
+            initial={reduceMotion ? false : { opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={reduceMotion ? undefined : { opacity: 0 }}
+            transition={{ duration: 0.12, ease: "easeOut" }}
           >
-            <PriceChart gex={snap.gex} ticker={snap.ticker} />
-          </Panel>
-
-          <Panel
-            title="Gamma exposure by strike"
-            subtitle={`${snap.gex.profile.length} strikes loaded`}
-            freshness={fresh}
-            age={age}
-          >
-            <GexProfile gex={snap.gex} />
-          </Panel>
-        </div>
-
-        <div className="grid__col">
-          <Panel title="Bias" subtitle={`confirmed vs ${snap.confirmer}`} freshness={fresh} age={age}>
-            <BiasPanel bias={snap.bias} />
-          </Panel>
-
-          <Panel title="Level map" subtitle="high to low" freshness={fresh} age={age}>
-            <LevelMap rows={snap.level_map} spot={snap.gex.spot} />
-          </Panel>
-
-          <Panel title="Track record" subtitle={snap.track?.ticker} freshness={fresh} age={age}>
-            <TrackRecord track={snap.track} />
-          </Panel>
-
-          <Panel title="Level check" subtitle="ours vs Unusual Whales">
-            {snap.level_check?.length ? (
-              <table className="levels">
-                <thead>
-                  <tr>
-                    <th>level</th>
-                    <th className="num">ours</th>
-                    <th className="num">UW</th>
-                    <th className="num">drift</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {snap.level_check.map((r) => (
-                    <tr key={r.level}>
-                      <td className="levels__role">{r.level}</td>
-                      <td className="num">{r.ours ?? "—"}</td>
-                      <td className="num">{r.uw ?? "—"}</td>
-                      <td className={`num levels__tag--${r.agree === false ? "down" : "up"}`}>
-                        {r.drift_pct === undefined ? "—" : `${r.drift_pct}%`}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <Empty>
-                No Unusual Whales levels to compare against. Once a key is set, our
-                Black-Scholes levels appear beside theirs and any drift is reported —
-                never resolved by overwriting ours.
-              </Empty>
+            {section === "board" && (
+              <div className="grid">
+                <div className="grid__col">
+                  <Panel title="Price" subtitle={`${snap.ticker} · our levels overlaid`} {...panelProps} grow>
+                    <PriceChart gex={snap.gex} ticker={snap.ticker} />
+                  </Panel>
+                  <Panel title="Level map" subtitle="high to low" {...panelProps}>
+                    <LevelMap rows={snap.level_map} spot={snap.gex.spot} />
+                  </Panel>
+                </div>
+                <div className="grid__col">
+                  <Panel title="Bias" subtitle={`confirmed vs ${snap.confirmer}`} {...panelProps}>
+                    <BiasPanel bias={snap.bias} />
+                  </Panel>
+                  <Panel title="Headlines" subtitle={snap.ticker}>
+                    <NewsRail ticker={snap.ticker} compact />
+                  </Panel>
+                </div>
+              </div>
             )}
-          </Panel>
-        </div>
-      </main>
+
+            {section === "gamma" && (
+              <div className="grid">
+                <div className="grid__col">
+                  <Panel
+                    title="Gamma exposure by strike"
+                    subtitle={`${snap.gex.profile.length} strikes loaded`}
+                    {...panelProps}
+                    grow
+                  >
+                    <GexProfile gex={snap.gex} />
+                  </Panel>
+                </div>
+                <div className="grid__col">
+                  <Panel title="Level map" subtitle="high to low" {...panelProps}>
+                    <LevelMap rows={snap.level_map} spot={snap.gex.spot} />
+                  </Panel>
+                  <Panel title="Level check" subtitle="ours vs Unusual Whales">
+                    {snap.level_check?.length ? (
+                      <table className="levels">
+                        <thead>
+                          <tr>
+                            <th>level</th>
+                            <th className="num">ours</th>
+                            <th className="num">UW</th>
+                            <th className="num">drift</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {snap.level_check.map((r) => (
+                            <tr key={r.level}>
+                              <td className="levels__role">{r.level}</td>
+                              <td className="num">{r.ours ?? "—"}</td>
+                              <td className="num">{r.uw ?? "—"}</td>
+                              <td className={`num levels__tag--${r.agree === false ? "down" : "up"}`}>
+                                {r.drift_pct === undefined ? "—" : `${r.drift_pct}%`}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    ) : (
+                      <Empty>
+                        No Unusual Whales levels to compare against. Once a key is set, our
+                        Black-Scholes levels appear beside theirs and any drift is reported —
+                        never resolved by overwriting ours.
+                      </Empty>
+                    )}
+                  </Panel>
+                  <Panel title="Trade plan" subtitle={snap.plan?.regime} {...panelProps}>
+                    <p className="bias__summary">{snap.plan?.headline}</p>
+                    <table className="levels">
+                      <tbody>
+                        {snap.plan?.rows?.map((r, i) => (
+                          <tr key={`${r.level}-${i}`}>
+                            <td className={`levels__price num levels__price--${r.tone}`}>{r.level}</td>
+                            <td className="levels__role">{r.label}</td>
+                            <td className={`levels__tag levels__tag--${r.tone}`}>{r.action}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <p className="disclaimer">{snap.plan?.bias_note}</p>
+                  </Panel>
+                </div>
+              </div>
+            )}
+
+            {section === "news" && (
+              <div className="view__single">
+                <Panel
+                  title="Market news"
+                  subtitle={`ranked by relevance, decayed by age · ${snap.ticker}`}
+                  grow
+                >
+                  <NewsRail ticker={snap.ticker} />
+                </Panel>
+              </div>
+            )}
+
+            {section === "journal" && (
+              <div className="view__single">
+                <Panel title="Track record" subtitle={snap.track?.ticker} {...panelProps} grow>
+                  <TrackRecord track={snap.track} />
+                </Panel>
+              </div>
+            )}
+
+            {section === "sources" && (
+              <div className="view__single">
+                <Panel title="Data sources" subtitle="what is actually feeding this screen">
+                  <table className="levels">
+                    <tbody>
+                      <tr>
+                        <td className="levels__role">Mode</td>
+                        <td>
+                          <span className={`chip chip--${snap.mock ? "warn" : "up"}`}>
+                            {snap.mock ? "MOCK" : snap.provider.toUpperCase()}
+                          </span>
+                        </td>
+                        <td className="levels__role">
+                          {snap.mock
+                            ? "Synthetic. Nothing here reflects a live market."
+                            : "Live provider for the option chain."}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="levels__role">Unusual Whales</td>
+                        <td>
+                          <span className={`chip chip--${health?.uw_key_set ? "up" : "quiet"}`}>
+                            {health?.uw_key_set ? "KEY SET" : "NO KEY"}
+                          </span>
+                        </td>
+                        <td className="levels__role">
+                          {health?.uw_key_set
+                            ? "Probe endpoint coverage before trusting a tier."
+                            : "Flow, dark pool and OI change are unavailable without it."}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="levels__role">Claude chat</td>
+                        <td>
+                          <span className={`chip chip--${health?.anthropic_key_set ? "up" : "quiet"}`}>
+                            {health?.anthropic_key_set ? "KEY SET" : "NO KEY"}
+                          </span>
+                        </td>
+                        <td className="levels__role">
+                          Written brief falls back to a template without it.
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="levels__role">Engine</td>
+                        <td className="num">pid {health?.pid ?? "—"}</td>
+                        <td className="levels__role">127.0.0.1:8765</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <p className="disclaimer">
+                    Where a value can come from more than one place, the panel showing it says
+                    which one served it.
+                  </p>
+                </Panel>
+              </div>
+            )}
+          </motion.main>
+        </AnimatePresence>
+      </div>
     </div>
   );
 }

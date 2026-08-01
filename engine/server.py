@@ -23,6 +23,7 @@ import datetime as dt
 import os
 import sys
 import threading
+import time
 
 import uvicorn
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -35,6 +36,7 @@ import config
 from pipeline import build_snapshot
 from logging_obsidian import log_to_obsidian
 from analysis import tracker
+from data import news_feed
 from data.data_sources import get_ohlc, get_bars
 
 DEFAULT_PORT = 8765
@@ -60,6 +62,12 @@ _latest = {}                                   # ticker -> snapshot
 _running = {"on": True}                        # live-feed toggle
 _active = {"ticker": config.PRIMARY_TICKER}    # what the scheduler refreshes
 _lock = threading.Lock()
+
+# News is cached separately from the snapshot: different cadence, different
+# failure modes, and a slow wire must not hold up a GEX refresh.
+NEWS_TTL = 180                                 # seconds
+_news_cache = {}                               # (ticker, sort, limit) -> payload
+_news_lock = threading.Lock()
 
 
 def refresh(ticker: str = None) -> dict:
@@ -141,6 +149,37 @@ def api_bars(ticker: str = None, interval: str = "5m", days: int = 5):
     """
     t = (ticker or _active["ticker"]).upper()
     return JSONResponse(get_bars(t, interval=interval, lookback_days=days))
+
+
+@app.get("/api/news")
+def api_news(ticker: str = None, sort: str = "relevance", limit: int = 60,
+             refresh: bool = False):
+    """
+    Aggregated financial news.
+
+    Cached for NEWS_TTL. Eleven upstream feeds is a real request every time,
+    and re-pulling all of them because someone switched tabs is both slow and
+    rude to servers that are giving us data for free. `refresh=true` forces it.
+    """
+    t = (ticker or _active["ticker"]).upper()
+    key = (t, sort, limit)
+    now = time.time()
+    with _news_lock:
+        hit = _news_cache.get(key)
+        if hit and not refresh and now - hit["fetched_wall"] < NEWS_TTL:
+            return JSONResponse({**hit, "cached": True})
+
+    data = news_feed.fetch_news(t, limit=limit, sort=sort)
+    data["fetched_wall"] = now
+    with _news_lock:
+        _news_cache[key] = data
+    return JSONResponse({**data, "cached": False})
+
+
+@app.get("/api/news/sources")
+def api_news_sources():
+    """The feed registry, so the UI can show what it's actually watching."""
+    return {"feeds": news_feed.FEEDS, "half_life_hours": news_feed.HALF_LIFE_H}
 
 
 @app.post("/api/ticker")
