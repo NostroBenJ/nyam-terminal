@@ -166,7 +166,28 @@ def main():
         except Exception as e:
             check(f"CORS allows {origin} ({what})", False, f"{type(e).__name__}: {e}")
 
-    print("[10] mock mode is labelled")
+    print("[10] the engine resolved its own paths correctly")
+    # Frozen builds resolve __file__ into the bundle archive, not the exe's
+    # folder. That silently broke .env loading (chat reported "no key" with a
+    # key present) and pointed STORE_DIR inside the app internals, where the
+    # OI history — which cannot be re-fetched — would be lost on reinstall.
+    paths = get("/api/paths")
+    check("base_dir reported", bool(paths.get("base_dir")), str(paths.get("base_dir")))
+    check("store_dir is under base_dir",
+          str(paths.get("store_dir", "")).startswith(str(paths.get("base_dir", "\0"))),
+          f'{paths.get("store_dir")} vs {paths.get("base_dir")}')
+    check("store_dir is writable", paths.get("store_writable") is True,
+          str(paths.get("store_writable")))
+    if paths.get("frozen"):
+        # In a frozen build the base dir must be the exe's folder.
+        check("frozen: base_dir is the exe directory",
+              paths.get("base_dir") == paths.get("exe_dir"),
+              f'{paths.get("base_dir")} vs {paths.get("exe_dir")}')
+        check("frozen: .env was looked for beside the exe",
+              str(paths.get("dotenv_path", "")).startswith(str(paths.get("exe_dir", "\0"))),
+              str(paths.get("dotenv_path")))
+
+    print("[11] mock mode is labelled")
     # A synthetic number that doesn't announce itself is the worst failure here.
     check("mock flag present", isinstance(snap.get("mock"), bool))
     if snap["mock"]:

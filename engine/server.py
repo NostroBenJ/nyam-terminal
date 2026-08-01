@@ -123,6 +123,41 @@ def api_health():
     }
 
 
+@app.get("/api/paths")
+def api_paths():
+    """
+    Where the engine is reading config and writing data.
+
+    Exists because frozen builds resolve these differently and get it wrong
+    silently: a `.env` that is never found looks identical to a missing key,
+    and a STORE_DIR inside the app bundle looks identical to a working one
+    until a reinstall wipes the OI history, which cannot be re-fetched.
+    Reports NO secret values — only paths and whether they resolved.
+    """
+    store = config.STORE_DIR
+    writable = False
+    try:
+        os.makedirs(store, exist_ok=True)
+        probe = os.path.join(store, ".write_probe")
+        with open(probe, "w") as f:
+            f.write("ok")
+        os.remove(probe)
+        writable = True
+    except OSError:
+        pass
+    dotenv = os.path.join(config.BASE_DIR, ".env")
+    return {
+        "frozen": bool(getattr(sys, "frozen", False)),
+        "base_dir": config.BASE_DIR,
+        "exe_dir": os.path.dirname(sys.executable),
+        "store_dir": store,
+        "store_writable": writable,
+        "dotenv_path": dotenv,
+        "dotenv_found": os.path.exists(dotenv),
+        "vault": config.OBSIDIAN_VAULT,
+    }
+
+
 @app.get("/api/status")
 def api_status():
     return {"running": _running["on"], "ticker": _active["ticker"]}

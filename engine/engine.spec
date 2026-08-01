@@ -32,6 +32,10 @@ hidden = [
     "apscheduler.triggers.cron",
     "apscheduler.executors.pool",
     "encodings.idna",          # urllib needs this for international hostnames
+    # chat.py does `from anthropic import Anthropic` INSIDE the function, so
+    # static analysis never sees it and the packaged build shipped without the
+    # SDK — chat failed with "anthropic SDK not installed" only once packaged.
+    "anthropic",
 ]
 
 # certifi's CA bundle is a data file, not a module — without it the ECB feed
@@ -51,8 +55,6 @@ a = Analysis(
     hiddenimports=hidden,
     hookspath=[],
     runtime_hooks=[],
-    # anthropic is optional (chat only) and pulls a large tree; excluded here
-    # keeps the bundle honest about what the engine actually needs to run.
     excludes=["tkinter", "matplotlib", "IPython", "pytest"],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,

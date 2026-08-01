@@ -5,7 +5,65 @@ Everything you'll want to tweak lives here so you don't have to dig through
 the code. Read the comments — they explain WHY each setting exists.
 """
 import os
+import sys
 from zoneinfo import ZoneInfo
+
+
+def _base_dir() -> str:
+    """
+    The directory the engine should read config from and write data to.
+
+    `os.path.dirname(__file__)` is WRONG once frozen: PyInstaller resolves it
+    to the bundle's internal archive path, not the folder the executable lives
+    in. That silently broke two things in the packaged build — `.env` was never
+    found (so chat reported "no key" with a key sitting right there), and
+    STORE_DIR pointed inside the app's internals, meaning the track record and
+    the daily OI snapshots were being written somewhere that gets replaced on
+    every reinstall. OI history cannot be re-fetched, so that one loses data
+    permanently.
+    """
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+BASE_DIR = _base_dir()
+
+
+def _load_dotenv():
+    """
+    Read `engine/.env` into the environment, if it exists.
+
+    Secrets live in a gitignored file next to the engine rather than in a
+    global user environment variable. A machine-wide variable is readable by
+    every process the user runs, which is a large blast radius for a key that
+    only one program needs. It also travels with the deployed app folder, so
+    the packaged build picks it up without a separate setup step.
+
+    A REAL environment variable always wins — this only fills in what isn't
+    already set, so `set ANTHROPIC_API_KEY=... && nyam-terminal.exe` still
+    overrides the file for a one-off.
+    """
+    path = os.path.join(BASE_DIR, ".env")
+    try:
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, _, val = line.partition("=")
+                key, val = key.strip(), val.strip().strip('"').strip("'")
+                if key and key not in os.environ:
+                    os.environ[key] = val
+    except FileNotFoundError:
+        pass
+    except OSError:
+        # An unreadable .env must not take the engine down; the app runs fine
+        # without a key and the UI already reports chat as disabled.
+        pass
+
+
+_load_dotenv()
 
 # ----------------------------------------------------------------------------
 # DATA MODE
@@ -82,14 +140,14 @@ SNAPSHOT_AND_LOG_AT = "09:25"  # auto-write the Obsidian note 5 min before open
 # ----------------------------------------------------------------------------
 # Point this at your vault. The logger writes one markdown note per morning.
 # Leave as-is to write into ./obsidian_out for testing.
-OBSIDIAN_VAULT = os.getenv("NYAM_VAULT", os.path.join(os.path.dirname(__file__), "obsidian_out"))
+OBSIDIAN_VAULT = os.getenv("NYAM_VAULT", os.path.join(BASE_DIR, "obsidian_out"))
 OBSIDIAN_SUBFOLDER = "NYAM Bias"   # notes land in <vault>/<subfolder>/YYYY-MM-DD.md
 
 # ----------------------------------------------------------------------------
 # TRACK RECORD
 # ----------------------------------------------------------------------------
 # Where predictions + outcomes are stored (one JSON file you can open & inspect).
-STORE_DIR = os.path.join(os.path.dirname(__file__), "data_store")
+STORE_DIR = os.path.join(BASE_DIR, "data_store")
 
 # THE GRADING WINDOW — grade the bias over the hours you actually trade.
 # You trade the open until roughly noon, so grading open->close was scoring the
