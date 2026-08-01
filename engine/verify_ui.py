@@ -148,7 +148,25 @@ def main():
         check("a high_impact read names its driver", bool(n.get("headline")),
               str(n.get("headline")))
 
-    print("[9] mock mode is labelled")
+    print("[9] CORS allows every origin the app is actually served from")
+    # This suite hits the API directly with urllib, which has no origin and is
+    # never blocked — so it happily passed while the PACKAGED app was dead.
+    # The packaged webview uses a different origin than the dev server, and a
+    # blocked fetch is indistinguishable from a dead engine in the UI.
+    for origin, what in (
+        ("http://localhost:1420", "Vite dev server"),
+        ("http://tauri.localhost", "packaged app on Windows"),
+        ("tauri://localhost", "packaged app on macOS/Linux"),
+    ):
+        req = urllib.request.Request(f"{BASE}/api/health", headers={"Origin": origin})
+        try:
+            with urllib.request.urlopen(req, timeout=10) as r:
+                allowed = r.headers.get("Access-Control-Allow-Origin")
+            check(f"CORS allows {origin} ({what})", bool(allowed), str(allowed))
+        except Exception as e:
+            check(f"CORS allows {origin} ({what})", False, f"{type(e).__name__}: {e}")
+
+    print("[10] mock mode is labelled")
     # A synthetic number that doesn't announce itself is the worst failure here.
     check("mock flag present", isinstance(snap.get("mock"), bool))
     if snap["mock"]:

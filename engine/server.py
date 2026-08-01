@@ -44,12 +44,23 @@ STARTED_AT = dt.datetime.now(dt.timezone.utc)
 
 app = FastAPI(title="NYAM Terminal engine", docs_url="/api/docs")
 
-# The Vite dev server runs on a different origin than the packaged app, where
-# the frontend is served from tauri:// and same-origin doesn't apply either.
-# Localhost-only binding is what actually keeps this closed to the network.
+# The dev server and the packaged app are DIFFERENT ORIGINS, and getting this
+# list wrong fails in the worst way: dev works perfectly while the packaged app
+# shows "engine unreachable", because a blocked fetch and a dead engine look
+# identical from the frontend.
+#
+# Origins that must be allowed:
+#   http://localhost:1420    Vite dev server
+#   http://tauri.localhost   packaged app on WINDOWS  <- this one was missing
+#   tauri://localhost        packaged app on macOS/Linux
+#
+# Localhost-only binding, not CORS, is what actually keeps this off the network.
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"^(https?://(localhost|127\.0\.0\.1)(:\d+)?|tauri://localhost)$",
+    allow_origin_regex=(
+        r"^(https?://(localhost|127\.0\.0\.1|tauri\.localhost)(:\d+)?"
+        r"|tauri://localhost)$"
+    ),
     allow_credentials=False,
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
