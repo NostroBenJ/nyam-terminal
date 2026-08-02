@@ -163,10 +163,96 @@ fn kill_engine(mut child: Child) {
     println!("[shell] engine {pid} stopped");
 }
 
+/// Open a panel in its own OS window.
+///
+/// Built for stacked-screen laptops (the ZenBook Duo) and multi-monitor desks:
+/// every popped-out panel is a real window the window manager can place, not a
+/// floating div that vanishes when the app loses focus.
+///
+/// All windows talk to the SAME engine on 127.0.0.1:8765, so a level shown in
+/// a detached window is the identical number the main board is showing. Two
+/// windows disagreeing about spot would be worse than having one.
+#[tauri::command]
+async fn open_panel(
+    app: tauri::AppHandle,
+    panel: String,
+    monitor: Option<usize>,
+) -> Result<String, String> {
+    use tauri::{WebviewUrl, WebviewWindowBuilder};
+
+    // One window per panel: asking twice focuses the existing one rather than
+    // stacking duplicates that then drift out of sync visually.
+    let label = format!("panel-{panel}");
+    if let Some(w) = app.get_webview_window(&label) {
+        let _ = w.set_focus();
+        return Ok(label);
+    }
+
+    let url = WebviewUrl::App(format!("index.html?panel={panel}").into());
+    let mut b = WebviewWindowBuilder::new(&app, &label, url)
+        .title(format!("NYAM — {panel}"))
+        .inner_size(900.0, 640.0)
+        .min_inner_size(420.0, 320.0)
+        .theme(Some(tauri::Theme::Dark));
+
+    // Place it on the requested monitor. On the Duo the second screen is the
+    // lower panel, which is where a scanner or news rail wants to live while
+    // the board stays up top.
+    if let Some(idx) = monitor {
+        if let Ok(monitors) = app.available_monitors() {
+            if let Some(m) = monitors.get(idx) {
+                let pos = m.position();
+                let size = m.size();
+                // Inset slightly so the window is obviously on that screen and
+                // not straddling the seam between the two panels.
+                b = b.position(pos.x as f64 + 40.0, pos.y as f64 + 40.0)
+                    .inner_size(
+                        (size.width as f64 / m.scale_factor() - 80.0).max(420.0),
+                        (size.height as f64 / m.scale_factor() - 120.0).max(320.0),
+                    );
+            }
+        }
+    }
+
+    b.build().map_err(|e| e.to_string())?;
+    Ok(label)
+}
+
+/// Monitors available for placement, so the UI can offer real choices rather
+/// than assuming a second screen exists.
+#[tauri::command]
+fn list_monitors(app: tauri::AppHandle) -> Result<Vec<serde_json::Value>, String> {
+    let monitors = app.available_monitors().map_err(|e| e.to_string())?;
+    let primary = app.primary_monitor().ok().flatten();
+    Ok(monitors
+        .iter()
+        .enumerate()
+        .map(|(i, m)| {
+            let s = m.size();
+            let p = m.position();
+            let is_primary = primary
+                .as_ref()
+                .map(|pm| pm.position() == m.position())
+                .unwrap_or(i == 0);
+            serde_json::json!({
+                "index": i,
+                "name": m.name().cloned().unwrap_or_else(|| format!("Display {}", i + 1)),
+                "width": s.width,
+                "height": s.height,
+                "x": p.x,
+                "y": p.y,
+                "scale": m.scale_factor(),
+                "primary": is_primary,
+            })
+        })
+        .collect())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .invoke_handler(tauri::generate_handler![open_panel, list_monitors])
         .manage(Engine(Mutex::new(None)))
         .setup(|app| {
             let handle = app.handle().clone();
@@ -197,6 +283,9 @@ pub fn run() {
         .run(|app, event| {
             // Kill the engine on exit. Without this the Python process
             // outlives the window and holds the port.
+            // Only tear the engine down when the LAST window closes. Killing it
+            // when any window exits would take the engine out from under a
+            // detached panel that is still open on the second screen.
             if let RunEvent::Exit = event {
                 if let Some(child) = app.state::<Engine>().0.lock().unwrap().take() {
                     kill_engine(child);

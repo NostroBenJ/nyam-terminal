@@ -9,6 +9,11 @@
 
 let cache: Record<string, string> | null = null;
 
+/** Themes swap token values, so anything holding literal colours must re-read. */
+export function invalidateTokens(): void {
+  cache = null;
+}
+
 const NAMES = [
   "--bg", "--panel", "--panel-2", "--line",
   "--text", "--muted", "--dim",

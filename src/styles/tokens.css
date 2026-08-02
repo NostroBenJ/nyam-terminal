@@ -1,38 +1,123 @@
-/* Trading terminal design tokens — the single source of truth.
-   Mirrors ~/.claude/skills/trading-ui/tokens.css. Never inline a hex value;
-   add the token here first. Six hues is the whole vocabulary. */
+/* Design tokens — the single source of truth for colour.
+ *
+ * THEMES SWAP VALUES, NEVER ADD NAMES. Every theme below defines the same
+ * token set, so no component ever learns a theme's name and nothing can drift
+ * out of theme support. If you need a new colour, it belongs in this file for
+ * every theme or it doesn't exist.
+ *
+ * Applied via data-theme on <html>. `terminal` is the default and is what
+ * :root carries, so the app renders correctly before JS runs.
+ */
 
-:root {
-  /* surfaces */
+:root,
+:root[data-theme="terminal"] {
+  --theme-name: "Terminal";
+
   --bg:        #0a0e14;
   --panel:     #0f141c;
   --panel-2:   #131a24;
   --line:      #1e2733;
 
-  /* text */
   --text:      #cdd6e4;
   --muted:     #6b7888;
   --dim:       #3b4554;
 
-  /* direction — never carried by hue alone; always a sign or position too */
   --up:          #26a69a;
   --up-soft:     rgba(38, 166, 154, .16);
   --down:        #ef5350;
   --down-soft:   rgba(239, 83, 80, .16);
 
-  /* the one warm highlight: selection, active tab, focus */
   --accent:      #e6b450;
   --accent-soft: rgba(230, 180, 80, .16);
 
-  /* non-directional / informational series */
-  --neutral:     #5a8dee;
+  --neutral:      #5a8dee;
   --neutral-soft: rgba(90, 141, 238, .16);
+}
 
-  /* type */
+/* TradingView's own dark palette, matched to their chart surfaces. Blue accent
+ * rather than gold, and a cooler slate throughout. If you keep a TV chart open
+ * beside this, they sit together instead of fighting. */
+:root[data-theme="tradingview"] {
+  --theme-name: "TradingView";
+
+  --bg:        #131722;
+  --panel:     #1e222d;
+  --panel-2:   #262b3a;
+  --line:      #2a2e39;
+
+  --text:      #d1d4dc;
+  --muted:     #787b86;
+  --dim:       #4f5966;
+
+  --up:          #26a69a;
+  --up-soft:     rgba(38, 166, 154, .16);
+  --down:        #ef5350;
+  --down-soft:   rgba(239, 83, 80, .16);
+
+  --accent:      #2962ff;
+  --accent-soft: rgba(41, 98, 255, .18);
+
+  --neutral:      #f7931a;
+  --neutral-soft: rgba(247, 147, 26, .16);
+}
+
+/* Neutral near-black. Highest contrast of the set — the one to use in a bright
+ * room, and the least tiring on an OLED. */
+:root[data-theme="carbon"] {
+  --theme-name: "Carbon";
+
+  --bg:        #0b0b0d;
+  --panel:     #141417;
+  --panel-2:   #1c1c21;
+  --line:      #2a2a30;
+
+  --text:      #e4e4e7;
+  --muted:     #8b8b93;
+  --dim:       #4d4d55;
+
+  --up:          #22c55e;
+  --up-soft:     rgba(34, 197, 94, .15);
+  --down:        #f43f5e;
+  --down-soft:   rgba(244, 63, 94, .15);
+
+  --accent:      #eab308;
+  --accent-soft: rgba(234, 179, 8, .16);
+
+  --neutral:      #38bdf8;
+  --neutral-soft: rgba(56, 189, 248, .16);
+}
+
+/* Softer, lifted greys. Lower contrast on purpose — easier over a long session
+ * if the harder themes start to glare. */
+:root[data-theme="slate"] {
+  --theme-name: "Slate";
+
+  --bg:        #161a20;
+  --panel:     #1d222a;
+  --panel-2:   #252b35;
+  --line:      #333b47;
+
+  --text:      #c9d1d9;
+  --muted:     #8b949e;
+  --dim:       #5a6472;
+
+  --up:          #3fb950;
+  --up-soft:     rgba(63, 185, 80, .15);
+  --down:        #f85149;
+  --down-soft:   rgba(248, 81, 73, .15);
+
+  --accent:      #d29922;
+  --accent-soft: rgba(210, 153, 34, .16);
+
+  --neutral:      #58a6ff;
+  --neutral-soft: rgba(88, 166, 255, .16);
+}
+
+/* Shared, theme-independent. */
+:root {
   --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
 
-  /* density */
   --row-h:     26px;
   --panel-pad: 14px;
   --radius:    4px;

@@ -115,6 +115,88 @@ code {
 .btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
 .btn:disabled { opacity: .5; cursor: default; }
 
+/* ------------------------------------------------------- detached window -- */
+
+/* A popped-out panel gets a single compact identity bar — no rail, no second
+   top bar. Vertical space on a stacked second screen is the scarce thing. */
+.app--detached .view { padding: 0; }
+
+.detached__bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+.detached__title {
+  font: 500 10px/1 var(--sans);
+  letter-spacing: .12em;
+  color: var(--accent);
+}
+.detached__ticker { font: 600 12px/1 var(--mono); color: var(--text); }
+.detached__spot { font: 500 12px/1 var(--mono); color: var(--muted); }
+.detached__bar .age { margin-left: auto; }
+
+.panel__pop {
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px 6px;
+}
+.panel__pop:hover { color: var(--accent); border-color: var(--accent); }
+
+/* -------------------------------------------------------------- settings -- */
+
+.settings { display: flex; flex-direction: column; gap: 22px; }
+.settings__block { display: flex; flex-direction: column; gap: 10px; }
+.settings__actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.settings__hint { font-size: 10.5px; color: var(--muted); line-height: 1.5; }
+.settings__note {
+  margin: 0;
+  padding: 6px 9px;
+  background: var(--panel-2);
+  border-radius: var(--radius);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.themes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+}
+.themecard {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--sans);
+}
+.themecard:hover { border-color: var(--muted); }
+.themecard--on { border-color: var(--accent); background: var(--accent-soft); }
+
+.themecard__swatches { display: flex; gap: 3px; }
+.themecard__sw {
+  width: 22px;
+  height: 14px;
+  border-radius: 2px;
+  border: 1px solid rgba(255, 255, 255, .08);
+}
+.themecard__label { font: 500 12px/1 var(--sans); color: var(--text); }
+.themecard__note { font-size: 10px; line-height: 1.45; color: var(--muted); }
+
 /* ---------------------------------------------------------------- flash -- */
 
 /* The only animation on live data: a brief tint so a change registers
