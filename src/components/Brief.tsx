@@ -19,7 +19,24 @@ export function Brief({ snap }: { snap: Snapshot }) {
         <span className={`chip chip--${fromClaude ? "up" : "quiet"}`}>
           {fromClaude ? `WRITTEN BY ${(meta?.model ?? "claude").toUpperCase()}` : "TEMPLATED"}
         </span>
-        {!fromClaude && meta?.error && (
+        {/* Reused, not regenerated. Shown so a brief that hasn't changed in an
+            hour doesn't read as a fresh take on the current tape. */}
+        {meta?.cached && (
+          <span className="chip chip--quiet" title="The underlying read hasn't changed, so the brief was reused rather than rewritten.">
+            reused{meta.age_s ? ` · ${Math.round(meta.age_s / 60)}m` : ""}
+          </span>
+        )}
+        {meta?.budget_capped && (
+          <span className="chip chip--warn" title={meta.error ?? ""}>
+            budget cap
+          </span>
+        )}
+        {meta?.calls_today !== undefined && (
+          <span className="brief__calls" title="Model calls spent on this ticker today">
+            {meta.calls_today} call{meta.calls_today === 1 ? "" : "s"} today
+          </span>
+        )}
+        {!fromClaude && meta?.error && !meta.budget_capped && (
           <span className="brief__err" title={meta.error}>
             {meta.error.startsWith("No ANTHROPIC")
               ? "no API key — set one in Sources"

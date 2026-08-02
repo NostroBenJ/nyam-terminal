@@ -123,6 +123,12 @@ export interface Snapshot {
     source: "claude" | "template" | string;
     model: string | null;
     error: string | null;
+    /** True when reused because the underlying read hasn't changed. */
+    cached?: boolean;
+    age_s?: number;
+    /** Model calls spent on this ticker today — the cost meter. */
+    calls_today?: number;
+    budget_capped?: boolean;
   };
   /** Event risk. `kind: "landed"` means news that already published — this is
    *  NOT a forward calendar, and the two call for opposite trades. */
