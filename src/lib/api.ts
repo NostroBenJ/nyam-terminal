@@ -117,6 +117,13 @@ export interface Snapshot {
   smt: { signal: string; lean: number; note: string };
   bias: Bias;
   brief: string;
+  /** Who wrote the brief — a model reading and string formatting are
+   *  different claims, and the prose alone can't tell you which. */
+  brief_meta?: {
+    source: "claude" | "template" | string;
+    model: string | null;
+    error: string | null;
+  };
   /** Event risk. `kind: "landed"` means news that already published — this is
    *  NOT a forward calendar, and the two call for opposite trades. */
   news: {
@@ -263,6 +270,55 @@ export interface Flow {
   note: string;
 }
 
+export interface ChatStatus {
+  enabled: boolean;
+  model: string;
+}
+
+export interface ChatTurn {
+  role: "user" | "assistant";
+  content: string;
+}
+
+/**
+ * Stream a reply, calling `onChunk` as text arrives.
+ *
+ * The engine sends plain text chunks, not SSE — there is no event framing to
+ * parse, so this just decodes and appends. Returns the full text.
+ *
+ * `signal` lets the UI abort a run in flight; a half-finished answer left
+ * streaming into a panel you have navigated away from is both confusing and
+ * billable.
+ */
+export async function chatStream(
+  ticker: string,
+  message: string,
+  history: ChatTurn[],
+  onChunk: (text: string) => void,
+  signal?: AbortSignal
+): Promise<string> {
+  const res = await fetch(`${ENGINE}/api/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ticker, message, history }),
+    signal,
+  });
+  if (!res.ok) throw new Error(`chat ${res.status}: ${await res.text()}`);
+  if (!res.body) throw new Error("chat returned no body");
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let full = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const chunk = decoder.decode(value, { stream: true });
+    full += chunk;
+    onChunk(chunk);
+  }
+  return full;
+}
+
 export interface Health {
   ok: boolean;
   warm: string[];
@@ -292,6 +348,7 @@ export const api = {
     req<Bars>(
       `/api/bars?ticker=${encodeURIComponent(ticker)}&interval=${encodeURIComponent(interval)}&days=${days}`
     ),
+  chatStatus: () => req<ChatStatus>("/api/chat/status"),
   sessions: () => req<Sessions>("/api/sessions"),
   flow: (ticker: string, limit = 100) =>
     req<Flow>(`/api/flow?ticker=${encodeURIComponent(ticker)}&limit=${limit}`),

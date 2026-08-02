@@ -16,7 +16,7 @@ from analysis import plan
 from analysis import tracker
 import store
 from data.data_sources import get_market
-from claude_brief import generate_brief
+from claude_brief import generate_brief_meta
 
 
 def _cross_check(gex: dict, uw_levels: dict, tol: float = 0.004) -> list | None:
@@ -136,7 +136,7 @@ def build_snapshot(ticker: str = None) -> dict:
 
     news = _news_for(p["ticker"], market)
     bias = bias_engine.build_bias(gex, levels, smt, news, em=em, neg_zone=neg_zone)
-    brief = generate_brief(bias, gex, levels, smt, news)
+    brief = generate_brief_meta(bias, gex, levels, smt, news, p["ticker"])
 
     # --- the actionable layer ----------------------------------------------
     grid = matrix.build(per_expiry, p["spot"])
@@ -173,7 +173,9 @@ def build_snapshot(ticker: str = None) -> dict:
         "expiry_confluence": expiry_conf,
         "smt": smt,
         "bias": bias,
-        "brief": brief,
+        "brief": brief["text"],
+        # Who wrote the brief. The UI labels it; it cannot tell from the prose.
+        "brief_meta": {k: v for k, v in brief.items() if k != "text"},
         "news": news,
         "track": track,
     }

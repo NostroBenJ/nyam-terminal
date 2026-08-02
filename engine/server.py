@@ -358,14 +358,25 @@ def main():
     tracker.grade_pending(get_ohlc)            # grade any past, ungraded calls
 
     if not args.no_warm:
-        # Warm the cache so the first panel render is instant. A failure here
-        # must not stop the server from binding — the shell would read a dead
-        # port as a crashed engine, when the real fault is one bad data pull.
-        try:
-            refresh()
-        except Exception as e:
-            print(f"[warn] startup refresh failed: {type(e).__name__}: {e}",
-                  file=sys.stderr, flush=True)
+        # Warm the cache IN THE BACKGROUND so the port opens immediately.
+        #
+        # This used to run inline. Once the brief started calling Claude, that
+        # put a network round-trip in front of the socket bind — cold start went
+        # from ~0.6s to several seconds, and during that window the shell and
+        # any health probe see a dead port, which is indistinguishable from a
+        # crashed engine. Nothing that can block on a remote service belongs
+        # before the listener.
+        #
+        # A failure here must not stop the server binding either; the frontend
+        # already handles an empty cache by fetching on demand.
+        def _warm():
+            try:
+                refresh()
+            except Exception as e:
+                print(f"[warn] startup refresh failed: {type(e).__name__}: {e}",
+                      file=sys.stderr, flush=True)
+
+        threading.Thread(target=_warm, name="warm", daemon=True).start()
 
     if not args.no_scheduler:
         start_scheduler()

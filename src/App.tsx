@@ -19,6 +19,8 @@ import { initTheme, subscribeTheme, type ThemeId } from "./lib/theme";
 import { invalidateTokens } from "./lib/tokens";
 import { openPanel, panelFromUrl, isTauri } from "./lib/windows";
 import { Settings } from "./components/Settings";
+import { Chat } from "./components/Chat";
+import { Brief } from "./components/Brief";
 import "./styles/tokens.css";
 import "./styles/app.css";
 
@@ -286,6 +288,23 @@ export default function App() {
                    right={pop("flow")} grow>
               <FlowScanner ticker={snap!.ticker} />
             </Panel>
+          </div>
+        );
+
+      case "ask":
+        return (
+          <div className="grid">
+            <div className="grid__col">
+              <Panel title="Ask" subtitle={`grounded in the live ${snap!.ticker} snapshot`}
+                     right={pop("ask")} grow>
+                <Chat ticker={snap!.ticker} />
+              </Panel>
+            </div>
+            <div className="grid__col">
+              <Panel title="Morning brief" subtitle={snap!.ticker} {...panelProps}>
+                <Brief snap={snap!} />
+              </Panel>
+            </div>
           </div>
         );
 

@@ -7,7 +7,8 @@
  * useful than wondering whether you imagined it.
  */
 
-export type SectionId = "board" | "gamma" | "flow" | "news" | "journal" | "sources";
+export type SectionId =
+  | "board" | "gamma" | "flow" | "ask" | "news" | "journal" | "sources";
 
 export interface Section {
   id: SectionId;
@@ -25,6 +26,7 @@ export const SECTIONS: Section[] = [
   // are labelled as such. Leaving it disabled would have hidden finished work
   // behind a key that hasn't arrived.
   { id: "flow", label: "Flow", glyph: "⇄", hint: "Options order flow scanner" },
+  { id: "ask", label: "Ask", glyph: "✦", hint: "Brief and chat, grounded in this snapshot" },
   { id: "news", label: "News", glyph: "◈", hint: "Market-moving headlines" },
   { id: "journal", label: "Journal", glyph: "✓", hint: "Graded calls and hit rate" },
   { id: "sources", label: "Sources", glyph: "⚙", hint: "Feeds, providers, and what's live" },
