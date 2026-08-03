@@ -133,6 +133,21 @@ TZ = ZoneInfo("America/New_York")
 PREMARKET_START = "07:00"   # begin auto-refreshing
 MARKET_OPEN = "09:30"       # the moment your bias is for
 REFRESH_SECONDS = 60        # frontend polls /api/bias this often
+
+# The scheduler used to stop at 09:59 — it only ever covered pre-market. That
+# left the two hours you actually trade (09:30–12:00) with no auto-refresh at
+# all: the board froze on its 10:00 snapshot while the age chip quietly climbed.
+# Auto-refresh now runs through the window the bias is graded over.
+SESSION_REFRESH_UNTIL = "12:00"
+
+# How often to re-pull the option CHAIN, as opposed to the spot price.
+#
+# One refresh is 9 Yahoo requests, 5 of them option_chain calls — and Yahoo
+# updates open interest ONCE A DAY. Re-pulling all of it every 60s across a
+# six-hour window is 3,240 requests/morning for data that changes once. Spot
+# moves constantly and genuinely changes GEX (gamma is spot-dependent), so the
+# quote is refreshed every cycle and the chain is reused between pulls.
+CHAIN_REFRESH_SECONDS = 300
 SNAPSHOT_AND_LOG_AT = "09:25"  # auto-write the Obsidian note 5 min before open
 
 # ----------------------------------------------------------------------------

@@ -12,6 +12,7 @@ To go live:
     export NYAM_MOCK=0
 """
 import datetime as dt
+import time as _time
 
 import config
 from data.mock_data import mock_market
@@ -323,6 +324,31 @@ def _live_market(ticker: str) -> dict:
     }
 
 
+# ---------------------------------------------------------------------------
+# Chain cache
+# ---------------------------------------------------------------------------
+# Splits the expensive, slow-moving part of a refresh (the option chain and the
+# overnight range — 6 of 9 Yahoo requests) from the cheap, fast-moving part
+# (spot). Yahoo publishes open interest once a day; spot moves all session and
+# genuinely changes GEX, because gamma is spot-dependent. So the quote is
+# re-fetched every cycle and the chain is reused until CHAIN_REFRESH_SECONDS.
+#
+# Cached expiry dicts are handed back by reference. The only thing downstream
+# that writes to them is `oi_store.apply_oi_change`, which recomputes
+# `oi_change` from `oi` against a stored baseline — idempotent, so re-applying
+# it to a reused chain gives the same answer rather than compounding.
+_chain_cache: dict = {}
+
+
+def chain_cache_state(ticker: str) -> dict:
+    """For the UI: how old the cached chain is, and when it refreshes."""
+    hit = _chain_cache.get((ticker or "").upper())
+    if not hit:
+        return {"cached": False, "age_s": None, "ttl_s": config.CHAIN_REFRESH_SECONDS}
+    return {"cached": True, "age_s": int(_time.time() - hit["at"]),
+            "ttl_s": config.CHAIN_REFRESH_SECONDS}
+
+
 def _live_ticker(yf, symbol: str, with_chain: bool) -> dict:
     tk = yf.Ticker(symbol)
     hist = tk.history(period="10d", interval="1d")
@@ -336,7 +362,26 @@ def _live_ticker(yf, symbol: str, with_chain: bool) -> dict:
     last_idx = hist.index[-1].date()
     prior = hist.iloc[-2] if last_idx >= today else hist.iloc[-1]
 
-    on_high, on_low, on_is_real = _overnight_range(tk, prior)
+    # The chain and the overnight range are the slow half of a refresh; spot
+    # above is the fast half and is always re-fetched.
+    key = symbol.upper()
+    hit = _chain_cache.get(key)
+    fresh = hit and (_time.time() - hit["at"]) < config.CHAIN_REFRESH_SECONDS
+    # A cache entry that predates the current session is never reused: expiries
+    # roll and yesterday's chain would be quietly wrong rather than merely old.
+    if fresh and hit.get("day") != dt.date.today():
+        fresh = False
+
+    if fresh and (not with_chain or hit.get("expiries") is not None):
+        on_high, on_low, on_is_real = hit["overnight"]
+        expiries = hit.get("expiries")
+    else:
+        on_high, on_low, on_is_real = _overnight_range(tk, prior)
+        expiries = _live_expiries(tk) if with_chain else None
+        _chain_cache[key] = {
+            "at": _time.time(), "day": dt.date.today(),
+            "overnight": (on_high, on_low, on_is_real), "expiries": expiries,
+        }
 
     out = {
         "ticker": symbol,
@@ -351,7 +396,7 @@ def _live_ticker(yf, symbol: str, with_chain: bool) -> dict:
         "on_is_real": on_is_real,
     }
     if with_chain:
-        out["expiries"] = _live_expiries(tk)
+        out["expiries"] = expiries or []
     return out
 
 

@@ -9,7 +9,6 @@ import { GexProfile } from "./components/GexProfile";
 import { PriceChart } from "./components/PriceChart";
 import { BiasPanel } from "./components/BiasPanel";
 import { LevelMap } from "./components/LevelMap";
-import { TrackRecord } from "./components/TrackRecord";
 import { NewsRail } from "./components/NewsRail";
 import { EventRisk } from "./components/EventRisk";
 import { SessionClock } from "./components/SessionClock";
@@ -21,6 +20,7 @@ import { openPanel, panelFromUrl, isTauri } from "./lib/windows";
 import { Settings } from "./components/Settings";
 import { Chat } from "./components/Chat";
 import { Brief } from "./components/Brief";
+import { Journal } from "./components/Journal";
 import "./styles/tokens.css";
 import "./styles/app.css";
 
@@ -322,8 +322,13 @@ export default function App() {
       case "journal":
         return (
           <div className="view__single">
-            <Panel title="Track record" subtitle={snap!.track?.ticker} {...panelProps} grow>
-              <TrackRecord track={snap!.track} />
+            <Panel
+              title="Journal"
+              subtitle={`${snap!.ticker} · every call and why it was made`}
+              right={pop("journal")}
+              grow
+            >
+              <Journal ticker={snap!.ticker} />
             </Panel>
           </div>
         );

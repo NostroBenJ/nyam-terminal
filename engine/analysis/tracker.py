@@ -53,17 +53,74 @@ def record_prediction(snap: dict) -> dict:
     k = key(snap["ticker"], date)
     if k in recs:
         return recs
+    g, b = snap["gex"], snap["bias"]
     recs[k] = {
         "date": date,
         "ticker": snap["ticker"],
-        "bias": snap["bias"]["label"],
-        "score": snap["bias"]["score"],
-        "predicted_dir": predicted_dir(snap["bias"]["label"]),
-        "spot": snap["gex"]["spot"],
+        "bias": b["label"],
+        "score": b["score"],
+        "predicted_dir": predicted_dir(b["label"]),
+        "spot": g["spot"],
         "outcome": None,
+        # WHY the call was made, captured at call time.
+        #
+        # The record used to hold only bias/score/spot — enough to score a call
+        # and useless for learning from it. Months later you could see that a
+        # SHORT LEAN lost, with no way to ask whether the reasoning was wrong or
+        # the read was right and the tape disagreed. None of this is
+        # reconstructable afterwards: the chain that produced these levels is
+        # gone by the next session. Captured now or not at all.
+        "context": {
+            "regime": g.get("regime"),
+            "net_gex": g.get("net_gex"),
+            "gamma_flip": g.get("gamma_flip"),
+            "call_wall": g.get("call_wall"),
+            "put_wall": g.get("put_wall"),
+            "control_node": g.get("control_node"),
+            "atm_iv": g.get("atm_iv"),
+            "put_call_ratio": g.get("put_call_ratio"),
+            "expected_move": snap.get("expected_move"),
+            "conviction": b.get("conviction"),
+            "summary": b.get("summary"),
+            "signals": [{"name": s.get("name"), "lean": s.get("lean"),
+                         "weight": s.get("weight"), "reason": s.get("reason")}
+                        for s in b.get("signals", [])],
+            "smt": (snap.get("smt") or {}).get("note"),
+            "news": (snap.get("news") or {}).get("headline"),
+            "news_level": (snap.get("news") or {}).get("level"),
+            "provider": "mock" if snap.get("mock") else snap.get("provider"),
+        },
+        # Yours to write. Never touched by grading.
+        "note": "",
     }
     store.save(recs)
     return recs
+
+
+def set_note(ticker: str, date: str, note: str) -> bool:
+    """Attach a note to one call. False if there's no such record."""
+    recs = store.load()
+    k = key(ticker, date)
+    if k not in recs:
+        return False
+    recs[k]["note"] = note
+    store.save(recs)
+    return True
+
+
+def journal(ticker: str = None, limit: int = 120) -> list:
+    """
+    Full records, newest first — the graded call plus what drove it.
+
+    Deliberately separate from compute_stats: stats answer "is this working",
+    the journal answers "why did this one go the way it did".
+    """
+    recs = store.load()
+    vals = list(recs.values())
+    if ticker:
+        vals = [r for r in vals if r.get("ticker", "").upper() == ticker.upper()]
+    vals.sort(key=lambda r: r.get("date", ""), reverse=True)
+    return vals[:limit]
 
 
 def grade_record(rec: dict, ohlc: dict, band: float = None) -> dict | None:

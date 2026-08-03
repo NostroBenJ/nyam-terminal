@@ -10,8 +10,17 @@ snapshot of the output.
 """
 import statistics as st
 
-import data.data_sources as ds
-from data.mock_data import _mock_spot
+import config
+
+# Pin mock mode. Every check below is about the SYNTHETIC bar generator — that
+# it anchors to the mock spot, that spacing is exact, that it's deterministic.
+# Without this the suite reads whatever NYAM_MOCK happens to be in .env, so
+# switching the app to live data made 11 checks fail against real Yahoo bars
+# they were never written to describe. A suite's mode is part of the suite.
+config.USE_MOCK_DATA = True
+
+import data.data_sources as ds                            # noqa: E402
+from data.mock_data import _mock_spot                     # noqa: E402
 
 FAILS = []
 

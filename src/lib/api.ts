@@ -325,6 +325,49 @@ export async function chatStream(
   return full;
 }
 
+/** One recorded call, plus the reasoning captured when it was made. */
+export interface JournalRecord {
+  date: string;
+  ticker: string;
+  bias: string;
+  score: number;
+  predicted_dir: "up" | "down" | "flat" | string;
+  spot: number;
+  note?: string;
+  outcome: {
+    correct: boolean;
+    actual_dir: string;
+    move_pct: number;
+    rule?: string;
+    note?: string;
+  } | null;
+  /** Absent on records written before context capture existed. */
+  context?: {
+    regime?: string;
+    net_gex?: number;
+    gamma_flip?: number | null;
+    call_wall?: number | null;
+    put_wall?: number | null;
+    control_node?: number | null;
+    atm_iv?: number;
+    put_call_ratio?: number;
+    expected_move?: { dollars: number; pct: number; low: number; high: number };
+    conviction?: string;
+    summary?: string;
+    signals?: Array<{ name: string; lean: number; weight: number; reason: string }>;
+    smt?: string;
+    news?: string;
+    news_level?: string;
+    provider?: string;
+  };
+}
+
+export interface Journal {
+  ticker: string;
+  records: JournalRecord[];
+  stats: TrackRecord;
+}
+
 export interface Health {
   ok: boolean;
   warm: string[];
@@ -355,6 +398,14 @@ export const api = {
       `/api/bars?ticker=${encodeURIComponent(ticker)}&interval=${encodeURIComponent(interval)}&days=${days}`
     ),
   chatStatus: () => req<ChatStatus>("/api/chat/status"),
+  journal: (ticker: string) =>
+    req<Journal>(`/api/journal?ticker=${encodeURIComponent(ticker)}`),
+  saveNote: (ticker: string, date: string, note: string) =>
+    req<{ ok: boolean }>("/api/journal/note", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ticker, date, note }),
+    }),
   sessions: () => req<Sessions>("/api/sessions"),
   flow: (ticker: string, limit = 100) =>
     req<Flow>(`/api/flow?ticker=${encodeURIComponent(ticker)}&limit=${limit}`),

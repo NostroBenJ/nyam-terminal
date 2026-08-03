@@ -35,6 +35,7 @@ import config
 from pipeline import build_snapshot
 from logging_obsidian import log_to_obsidian
 from analysis import tracker
+import store as store_mod
 from analysis import sessions
 from data import flow, news_feed
 from data.data_sources import get_ohlc, get_bars
@@ -210,6 +211,36 @@ def api_news(ticker: str = None, sort: str = "relevance", limit: int = 60,
         t, limit=limit, sort=sort, ttl=NEWS_TTL, force=refresh))
 
 
+@app.get("/api/journal")
+def api_journal(ticker: str = None, limit: int = 120):
+    """
+    Every recorded call for a ticker, newest first, with the reasoning that
+    produced it. Reads the store directly — no market data, so it stays fast
+    and works when a feed is down.
+    """
+    t = (ticker or _active["ticker"]).upper()
+    return JSONResponse({
+        "ticker": t,
+        "records": tracker.journal(t, limit=limit),
+        "stats": tracker.compute_stats(store_mod.load(), ticker=t),
+    })
+
+
+@app.post("/api/journal/note")
+async def api_journal_note(request: Request):
+    """Attach your own note to one call. Grading never touches it."""
+    body = await request.json()
+    t = (body.get("ticker") or _active["ticker"]).upper()
+    date = (body.get("date") or "").strip()
+    note = body.get("note") or ""
+    if not date:
+        return JSONResponse({"error": "date required"}, status_code=400)
+    ok = tracker.set_note(t, date, note)
+    if not ok:
+        return JSONResponse({"error": f"no record for {t} on {date}"}, status_code=404)
+    return {"ok": True, "ticker": t, "date": date}
+
+
 @app.get("/api/sessions")
 def api_sessions():
     """Market session clock. Cheap and pure — no cache, no upstream."""
@@ -327,10 +358,15 @@ def start_scheduler():
     """
     sched = BackgroundScheduler(timezone=str(config.TZ))
     start_h = int(config.PREMARKET_START.split(":")[0])
-    open_h = int(config.MARKET_OPEN.split(":")[0])
+    # Run through the window the bias is GRADED over, not just to the open.
+    # `hour=f"{start_h}-{open_h}"` stopped firing at 09:59, so the two hours
+    # actually traded had no auto-refresh: the board sat on its 10:00 snapshot
+    # while the age chip climbed. Cheap now that the chain is cached — the
+    # extra cycles re-fetch a quote, not 5 option chains.
+    end_h = int(config.SESSION_REFRESH_UNTIL.split(":")[0])
     every = max(config.REFRESH_SECONDS, 30)
     sched.add_job(scheduled_refresh, "cron", day_of_week="mon-fri",
-                  hour=f"{start_h}-{open_h}",
+                  hour=f"{start_h}-{end_h}",
                   second=f"*/{every}" if every < 60 else "0",
                   minute="*" if every < 60 else f"*/{max(1, every // 60)}")
 
