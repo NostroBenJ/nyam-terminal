@@ -368,6 +368,49 @@ export interface Journal {
   stats: TrackRecord;
 }
 
+export interface CalEvent {
+  kind: "econ" | "earnings" | string;
+  title: string;
+  country: string;
+  impact: "High" | "Medium" | "Low" | "Holiday" | string;
+  /** 3 = high impact. Used for ordering and emphasis. */
+  rank: number;
+  date: string;
+  time: string;
+  forecast: string;
+  previous: string;
+  url: string;
+  ticker?: string;
+  days_out?: number;
+}
+
+export interface Calendar {
+  days: Array<{
+    date: string;
+    weekday: string;
+    is_today: boolean;
+    is_past: boolean;
+    events: CalEvent[];
+  }>;
+  /** Next high-impact event still ahead. */
+  headline: CalEvent | null;
+  high_impact: CalEvent[];
+  upcoming_earnings: CalEvent[];
+  counts: {
+    econ: number;
+    earnings_this_week: number;
+    earnings_upcoming: number;
+    total: number;
+  };
+  errors: Record<string, string>;
+  fetched_at: number;
+  source: string;
+  cached?: boolean;
+  /** True when the upstream failed and this is the last good calendar. */
+  stale?: boolean;
+  age_s?: number;
+}
+
 export interface Health {
   ok: boolean;
   warm: string[];
@@ -407,6 +450,8 @@ export const api = {
       body: JSON.stringify({ ticker, date, note }),
     }),
   sessions: () => req<Sessions>("/api/sessions"),
+  calendar: (refresh = false) =>
+    req<Calendar>(`/api/calendar${refresh ? "?refresh=true" : ""}`),
   flow: (ticker: string, limit = 100) =>
     req<Flow>(`/api/flow?ticker=${encodeURIComponent(ticker)}&limit=${limit}`),
   news: (ticker: string, sort = "relevance", refresh = false) =>

@@ -21,6 +21,7 @@ import { Settings } from "./components/Settings";
 import { Chat } from "./components/Chat";
 import { Brief } from "./components/Brief";
 import { Journal } from "./components/Journal";
+import { WeekAhead } from "./components/WeekAhead";
 import "./styles/tokens.css";
 import "./styles/app.css";
 
@@ -310,12 +311,19 @@ export default function App() {
 
       case "news":
         return (
-          <div className="view__single">
-            <Panel title="Market news"
-                   subtitle={`ranked by relevance, decayed by age · ${snap!.ticker}`}
-                   right={pop("news")} grow>
-              <NewsRail ticker={snap!.ticker} />
-            </Panel>
+          <div className="grid">
+            <div className="grid__col">
+              <Panel title="Market news"
+                     subtitle={`ranked by relevance, decayed by age · ${snap!.ticker}`}
+                     right={pop("news")} grow>
+                <NewsRail ticker={snap!.ticker} />
+              </Panel>
+            </div>
+            <div className="grid__col">
+              <Panel title="Week ahead" subtitle="scheduled — not yet happened">
+                <WeekAhead />
+              </Panel>
+            </div>
           </div>
         );
 

@@ -37,7 +37,7 @@ from logging_obsidian import log_to_obsidian
 from analysis import tracker
 import store as store_mod
 from analysis import sessions
-from data import flow, news_feed
+from data import calendar_feed, flow, news_feed
 from data.data_sources import get_ohlc, get_bars
 
 DEFAULT_PORT = 8765
@@ -263,6 +263,18 @@ def api_flow(ticker: str = None, limit: int = 100):
     if spot is None:
         spot = refresh(t)["gex"]["spot"]
     return JSONResponse(flow.get_flow(t, spot, limit=limit))
+
+
+@app.get("/api/calendar")
+def api_calendar(refresh: bool = False):
+    """
+    The week AHEAD — scheduled macro releases and upcoming earnings.
+
+    Distinct from /api/news, which reports what already published. "CPI lands
+    Wednesday 08:30" and "CPI landed an hour ago" call for opposite trades.
+    Cached inside calendar_feed because Forex Factory rate-limits.
+    """
+    return JSONResponse(calendar_feed.week_ahead(force=refresh))
 
 
 @app.get("/api/news/sources")
