@@ -262,16 +262,27 @@ def status(limit: int = 30) -> dict:
                                   (m.get("tickers") or {}).items() if v.get("errors")},
             })
 
-    # Trading days with no capture at all — the gaps that matter.
+    # Trading days with no capture — but only SINCE recording began.
+    #
+    # Counting every trading day before the recorder existed reports a fresh
+    # install as having "missed 10 days", which is true and useless: it is not
+    # a gap you could have prevented, and an alert that fires on day one is an
+    # alert you learn to ignore. The meaningful signal is a day you were
+    # recording and still missed — the machine was off, or a run failed.
     missing = []
     try:
         from analysis import sessions
         have = {d["date"] for d in days}
-        cur = dt.date.today()
-        for back in range(1, 15):
-            d = cur - dt.timedelta(days=back)
-            if sessions.day_status(d)["open"] and d.isoformat() not in have:
-                missing.append(d.isoformat())
+        if have:
+            since = min(have)
+            cur = dt.date.today()
+            for back in range(1, 40):
+                d = cur - dt.timedelta(days=back)
+                iso = d.isoformat()
+                if iso < since:
+                    break
+                if sessions.day_status(d)["open"] and iso not in have:
+                    missing.append(iso)
     except Exception:
         pass
 
