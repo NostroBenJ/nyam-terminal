@@ -45,8 +45,13 @@ FEEDS = [
      "tier": "primary", "url": "https://www.bls.gov/feed/bls_latest.rss"},
     {"id": "sec-press", "name": "SEC", "category": "regulatory",
      "tier": "primary", "url": "https://www.sec.gov/news/pressreleases.rss"},
-    {"id": "treasury", "name": "US Treasury", "category": "central-bank",
-     "tier": "primary", "url": "https://home.treasury.gov/rss/press.xml"},
+    # US Treasury removed 2026-08-02. It returned 503 for a while and then a
+    # settled 404; four candidate paths (/rss/press.xml, /news/press-releases/
+    # {feed,rss}, /rss/pressreleases.xml) all 404 while a control fetch of the
+    # Fed feed returns valid XML — so the endpoint is gone, not flaky. A source
+    # that can never succeed is worse than an absent one: it sits permanently
+    # in the "N sources unavailable" banner and trains you to ignore it, which
+    # is exactly the banner that has to stay meaningful.
     {"id": "ecb", "name": "ECB", "category": "central-bank",
      "tier": "primary", "url": "https://www.ecb.europa.eu/rss/press.html"},
 
