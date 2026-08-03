@@ -362,6 +362,28 @@ export interface JournalRecord {
   };
 }
 
+export interface CaptureDay {
+  date: string;
+  weekday: string | null;
+  trading_day: boolean | null;
+  provider: string | null;
+  uw_key: boolean | null;
+  tickers: string[];
+  graded: number | null;
+  files: number;
+  bytes: number;
+  errors: Record<string, string>;
+  ticker_errors: Record<string, Record<string, string>>;
+}
+
+export interface CaptureStatus {
+  dir: string;
+  days: CaptureDay[];
+  /** Trading days with no capture at all — permanent holes. */
+  missing_trading_days: string[];
+  total_bytes: number;
+}
+
 export interface Journal {
   ticker: string;
   records: JournalRecord[];
@@ -443,6 +465,7 @@ export const api = {
   chatStatus: () => req<ChatStatus>("/api/chat/status"),
   journal: (ticker: string) =>
     req<Journal>(`/api/journal?ticker=${encodeURIComponent(ticker)}`),
+  capture: () => req<CaptureStatus>("/api/capture"),
   saveNote: (ticker: string, date: string, note: string) =>
     req<{ ok: boolean }>("/api/journal/note", {
       method: "POST",

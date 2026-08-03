@@ -615,6 +615,28 @@ code {
 .track__rule { margin: 0; font-size: 10px; color: var(--dim); }
 .track__mixed { color: var(--accent); }
 
+/* ------------------------------------------------------------- recorder -- */
+
+.cap { display: flex; flex-direction: column; gap: 10px; }
+.cap__head { display: flex; align-items: center; gap: 12px; }
+.cap__stat { font: 600 24px/1 var(--mono); color: var(--text); }
+.cap__meta { display: flex; flex-direction: column; gap: 3px; }
+
+/* A missed day is a permanent hole, not a cosmetic gap. */
+.cap__missing {
+  padding: 8px 10px; border-radius: var(--radius);
+  background: var(--down-soft); color: var(--down);
+  font-size: 11px; line-height: 1.55;
+}
+.cap__missingwhy { margin-top: 3px; color: var(--muted); font-size: 10px; }
+
+.cap__table td, .cap__table th { font-size: 11px; }
+.cap__uw { margin-left: 5px; }
+.cap__flag { font: 500 9px/1 var(--mono); letter-spacing: .05em; }
+.cap__flag--ok  { color: var(--up); }
+.cap__flag--bad { color: var(--down); }
+.cap__flag--dim { color: var(--dim); }
+
 /* -------------------------------------------------------------- journal -- */
 
 .journal { display: flex; flex-direction: column; gap: 14px; }

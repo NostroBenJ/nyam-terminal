@@ -22,6 +22,7 @@ import { Chat } from "./components/Chat";
 import { Brief } from "./components/Brief";
 import { Journal } from "./components/Journal";
 import { WeekAhead } from "./components/WeekAhead";
+import { CaptureStatus } from "./components/CaptureStatus";
 import "./styles/tokens.css";
 import "./styles/app.css";
 
@@ -329,15 +330,22 @@ export default function App() {
 
       case "journal":
         return (
-          <div className="view__single">
-            <Panel
-              title="Journal"
-              subtitle={`${snap!.ticker} · every call and why it was made`}
-              right={pop("journal")}
-              grow
-            >
-              <Journal ticker={snap!.ticker} />
-            </Panel>
+          <div className="grid">
+            <div className="grid__col">
+              <Panel
+                title="Journal"
+                subtitle={`${snap!.ticker} · every call and why it was made`}
+                right={pop("journal")}
+                grow
+              >
+                <Journal ticker={snap!.ticker} />
+              </Panel>
+            </div>
+            <div className="grid__col">
+              <Panel title="Recorder" subtitle="headless daily capture">
+                <CaptureStatus />
+              </Panel>
+            </div>
           </div>
         );
 

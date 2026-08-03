@@ -211,6 +211,19 @@ def api_news(ticker: str = None, sort: str = "relevance", limit: int = 60,
         t, limit=limit, sort=sort, ttl=NEWS_TTL, force=refresh))
 
 
+@app.get("/api/capture")
+def api_capture(limit: int = 30):
+    """
+    What the headless recorder has stored, and which trading days it missed.
+
+    Gaps matter more than totals here: an option chain not captured on a given
+    day is not retrievable later at any price, so a missing weekday is a
+    permanent hole rather than a cosmetic one.
+    """
+    import capture as capture_mod
+    return JSONResponse(capture_mod.status(limit=limit))
+
+
 @app.get("/api/journal")
 def api_journal(ticker: str = None, limit: int = 120):
     """
