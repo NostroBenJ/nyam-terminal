@@ -74,7 +74,17 @@ export interface TrackRecord {
   hit_rate: number;
   /** Directional calls only — the number that matters. Baseline is 50. */
   dir_n: number;
-  dir_hit_rate: number;
+  /**
+   * NULL when dir_n is 0, and that is correct rather than a gap: a neutral
+   * call is graded but is not directional, so a book of only neutral calls has
+   * no directional hit rate to report. The engine says "unknown" instead of
+   * fabricating 0%.
+   *
+   * This was typed `number` while the engine sent null, so `tsc` passed and
+   * the packaged board crashed on `.toFixed()` with a blank window. A type
+   * that lies is worse than no type — it buys false confidence.
+   */
+  dir_hit_rate: number | null;
   by_type: Record<string, { n: number; wins: number; rate: number }>;
   recent: Array<{
     date: string;

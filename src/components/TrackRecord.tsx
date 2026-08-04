@@ -18,29 +18,49 @@ export function TrackRecord({ track }: { track: Track }) {
     return <p className="empty">No graded calls yet for {track?.ticker ?? "this ticker"}.</p>;
   }
 
-  const edge = track.dir_hit_rate - 50;
+  // A graded NEUTRAL call counts toward `n` but not toward `dir_n`, so a book
+  // of only neutral calls passes the n===0 guard above with no directional
+  // rate to show. dir_hit_rate is null there — correctly, since no such rate
+  // exists — and treating it as a number rendered "NaN%" at best and threw at
+  // worst. There is nothing to display, so display that.
+  const rated = track.dir_hit_rate !== null && track.dir_n > 0;
+  const edge = rated ? (track.dir_hit_rate as number) - 50 : 0;
   const thin = track.dir_n < MIN_MEANINGFUL;
-  const cls = thin ? "flat" : edge > 0 ? "up" : edge < 0 ? "down" : "flat";
+  const cls = !rated || thin ? "flat" : edge > 0 ? "up" : edge < 0 ? "down" : "flat";
 
   return (
     <div className="track">
       <div className="track__head">
         <span className={`track__rate num track__rate--${cls}`}>
-          {track.dir_hit_rate.toFixed(0)}%
+          {rated ? `${(track.dir_hit_rate as number).toFixed(0)}%` : "—"}
         </span>
         <div className="track__meta">
           <span className="track__label">directional accuracy</span>
           <span className="track__base">
-            {track.dir_n} graded · baseline 50% ·{" "}
-            <span className={`num track__edge track__edge--${cls}`}>
-              {edge > 0 ? "+" : edge < 0 ? "−" : "±"}
-              {Math.abs(edge).toFixed(0)} pts
-            </span>
+            {track.dir_n} graded · baseline 50%
+            {rated && (
+              <>
+                {" · "}
+                <span className={`num track__edge track__edge--${cls}`}>
+                  {edge > 0 ? "+" : edge < 0 ? "−" : "±"}
+                  {Math.abs(edge).toFixed(0)} pts
+                </span>
+              </>
+            )}
           </span>
         </div>
       </div>
 
-      {thin && (
+      {!rated && (
+        <p className="track__warn">
+          No directional calls graded yet — {track.n} call
+          {track.n === 1 ? "" : "s"} so far, all neutral. A neutral call is
+          graded but has no direction to be right about, so there is no
+          accuracy to report rather than an accuracy of zero.
+        </p>
+      )}
+
+      {rated && thin && (
         <p className="track__warn">
           Sample is too small to mean anything. {MIN_MEANINGFUL - track.dir_n} more graded
           sessions before this number is worth reading.
