@@ -13,6 +13,7 @@ real compositing window and is not fakeable here. Screenshot the app for that.
 Run against a LIVE engine:
     python verify_ui.py [http://127.0.0.1:8765]
 """
+import datetime as dt
 import json
 import math
 import sys
@@ -66,6 +67,53 @@ def main():
                 "gex", "expected_move", "level_map", "levels", "smt", "bias",
                 "news", "track", "plan", "trend"):
         check(f"snapshot.{key}", key in snap)
+
+    print("[1b] data age is reported separately from fetch age")
+    # The chip used to grade freshness off `generated_at` alone, so a snapshot
+    # assembled a second ago out of a 15-minute-old price rendered "1s ago" in
+    # green. These checks exist so that cannot come back silently.
+    for key in ("tape_time", "market_time"):
+        check(f"snapshot.{key} present", key in snap)
+    prov = snap.get("provider")
+    tape = snap.get("tape_time")
+    if snap.get("mock"):
+        check("mock reports no tape stamp", tape is None, str(tape))
+    elif prov == "uw":
+        check("uw supplies a tape stamp", bool(tape), str(tape))
+        if tape:
+            # Must be ISO-8601 UTC, because the UI parses it with Date.parse
+            # and a wall-clock string there would silently yield a wrong age.
+            try:
+                t = dt.datetime.fromisoformat(str(tape).replace("Z", "+00:00"))
+                check("tape_time is tz-aware ISO-8601", t.tzinfo is not None, str(tape))
+                age = (dt.datetime.now(dt.timezone.utc) - t).total_seconds()
+                # Negative age = provider clock ahead of ours; the UI shows
+                # "unknown" rather than a nonsense number, but flag it here.
+                check("tape_time is not in the future", age > -120, f"{age:.0f}s")
+            except ValueError as e:
+                check("tape_time is tz-aware ISO-8601", False, str(e))
+    else:
+        check("non-uw provider reports null tape (honest, not invented)",
+              tape is None, str(tape))
+
+    print("[1c] UW request budget is exposed and sane")
+    hb = h.get("uw_budget")
+    if h.get("provider") == "uw" and not snap.get("mock"):
+        check("health.uw_budget present", isinstance(hb, dict), str(hb)[:80])
+        if isinstance(hb, dict):
+            for key in ("used", "limit", "remaining", "pct", "date"):
+                check(f"uw_budget.{key}", key in hb)
+            check("budget limit is the documented cap", hb.get("limit") == 30000,
+                  str(hb.get("limit")))
+            check("used is counted, not zero after a live build", hb.get("used", 0) > 0,
+                  str(hb.get("used")))
+            check("used + remaining == limit",
+                  hb.get("used", 0) + hb.get("remaining", 0) == hb.get("limit"),
+                  f"{hb.get('used')} + {hb.get('remaining')}")
+            check("under the daily cap", hb.get("used", 0) < hb.get("limit", 0),
+                  f"{hb.get('pct')}%")
+    else:
+        check("uw_budget is null off the uw provider", hb is None, str(hb))
 
     print("[2] gex block is complete and self-consistent")
     g = snap["gex"]

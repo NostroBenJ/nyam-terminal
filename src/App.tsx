@@ -4,6 +4,7 @@ import { api, waitForEngine, type Health, type Snapshot } from "./lib/api";
 import { ageSeconds, ageLabel, freshness } from "./lib/format";
 import { Panel, Empty } from "./components/Panel";
 import { TopBar } from "./components/TopBar";
+import { UwBudget } from "./components/UwBudget";
 import { Sidebar, SECTIONS, type SectionId } from "./components/Sidebar";
 import { GexProfile } from "./components/GexProfile";
 import { PriceChart } from "./components/PriceChart";
@@ -358,6 +359,12 @@ export default function App() {
               </Panel>
             </div>
             <div className="grid__col">
+              <Panel
+                title="UW request budget"
+                subtitle={`today · ${health?.uw_budget ? "measured, not estimated" : "inactive"}`}
+              >
+                <UwBudget budget={health?.uw_budget} />
+              </Panel>
               <Panel title="Data sources" subtitle="what is actually feeding this screen">
                 <table className="levels">
                   <tbody>

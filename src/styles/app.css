@@ -250,6 +250,25 @@ code {
 .age--delayed { color: var(--accent); }
 .age--stale   { color: var(--down); }
 .age--unknown { color: var(--dim); }
+/* Fetch age sits BELOW data age in the visual hierarchy on purpose: it is a
+   diagnostic about us, not a claim about the market, and styling the two alike
+   is what let "4s ago" read as a live price. Never colored by freshness. */
+.age--fetch { color: var(--dim); opacity: 0.75; }
+
+/* ------------------------------------------------------------ uw budget -- */
+
+.budget { display: flex; flex-direction: column; gap: 7px; }
+.budget__row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.budget__used { font: 600 17px/1 var(--mono); }
+.budget__bar {
+  height: 5px;
+  border-radius: 3px;
+  background: var(--line);
+  overflow: hidden;
+}
+.budget__fill { height: 100%; background: var(--up); transition: width 240ms ease; }
+.budget__fill--warn { background: var(--accent); }
+.budget__fill--hot  { background: var(--down); }
 
 /* -------------------------------------------------------------- banners -- */
 

@@ -1,5 +1,8 @@
 import type { Snapshot } from "../lib/api";
-import { money, price, pct, ageLabel, freshness, type Freshness } from "../lib/format";
+import {
+  money, price, pct, ageLabel, freshness, tapeAgeSeconds, dataFreshness,
+  dataAgeLabel, type Freshness,
+} from "../lib/format";
 import { Flash } from "./Flash";
 
 /**
@@ -24,6 +27,8 @@ export function TopBar({
 }) {
   const g = snap.gex;
   const fresh: Freshness = freshness(ageSec);
+  const tapeAge = tapeAgeSeconds(snap.tape_time);
+  const dataFresh = dataFreshness(tapeAge, snap.provider, snap.mock);
   const source = snap.mock ? "MOCK" : snap.provider.toUpperCase();
 
   return (
@@ -86,9 +91,28 @@ export function TopBar({
         {source}
       </span>
 
-      <span className={`age age--${fresh}`}>
+      {/* TWO CLOCKS, SHOWN SEPARATELY AND ON PURPOSE.
+          The prominent one is the age of the market data itself; the muted one
+          is how long ago we fetched. Previously only the second existed and it
+          was styled as though it were the first, so the board could read "4s
+          ago" in green over a fifteen-minute-old price. */}
+      <span
+        className={`age age--${dataFresh}`}
+        title={
+          snap.tape_time
+            ? `Market data stamped ${snap.tape_time} by ${snap.provider}` +
+              (snap.market_time ? ` (${snap.market_time})` : "")
+            : snap.mock
+              ? "Synthetic data — no real timestamp exists."
+              : "This feed publishes no tape timestamp; treat as delayed."
+        }
+      >
         <i className="age__dot" />
-        {fresh === "unknown" ? "age unknown" : ageLabel(ageSec)}
+        {dataAgeLabel(tapeAge, snap.provider, snap.mock)}
+      </span>
+
+      <span className="age age--fetch" title="When this snapshot was last rebuilt — not how old the market data is.">
+        {fresh === "unknown" ? "fetch unknown" : `fetched ${ageLabel(ageSec)}`}
       </span>
 
       <button className="btn" onClick={onRefresh} disabled={busy}>

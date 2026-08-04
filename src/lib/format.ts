@@ -42,6 +42,27 @@ export function ageSeconds(generatedAt: string): number | null {
   return Number.isFinite(age) ? age : null;
 }
 
+/**
+ * Age of the MARKET DATA, from the provider's own server-side tape stamp.
+ *
+ * Not the same quantity as ageSeconds(), and conflating them was a real defect:
+ * `generated_at` says when we built the snapshot, so a snapshot assembled one
+ * second ago out of a fifteen-minute-old price reported "1s ago" in green. That
+ * is our promptness dressed up as the market's freshness, on a board whose only
+ * job is to not do that.
+ *
+ * Parsed from ISO-8601 UTC ("2026-08-03T23:59:42Z"), which — unlike the
+ * wall-clock string ageSeconds() has to cope with — is unambiguous, so this is
+ * the more trustworthy of the two clocks.
+ */
+export function tapeAgeSeconds(tapeTime: string | null | undefined): number | null {
+  if (!tapeTime) return null;
+  const t = Date.parse(tapeTime);
+  if (!Number.isFinite(t)) return null;
+  const age = (Date.now() - t) / 1000;
+  return Number.isFinite(age) ? age : null;
+}
+
 export type Freshness = "live" | "delayed" | "stale" | "unknown";
 
 export function freshness(ageSec: number | null): Freshness {
@@ -49,6 +70,37 @@ export function freshness(ageSec: number | null): Freshness {
   if (ageSec < 90) return "live";
   if (ageSec < 15 * 60) return "delayed";
   return "stale";
+}
+
+/**
+ * What the board should claim about its own data.
+ *
+ * Three cases, deliberately distinct:
+ *   - a tape stamp exists  -> grade the DATA's age; this is a measured fact
+ *   - no stamp, delayed feed (yahoo) -> "delayed", regardless of fetch age.
+ *     A fast fetch of a slow feed is still slow, and the old code would call
+ *     that "live".
+ *   - mock -> unknown. Synthetic data has no meaningful age at all.
+ */
+export function dataFreshness(
+  tapeAgeSec: number | null,
+  provider: string,
+  mock: boolean,
+): Freshness {
+  if (mock) return "unknown";
+  if (tapeAgeSec !== null) return freshness(tapeAgeSec);
+  return provider === "uw" ? "unknown" : "delayed";
+}
+
+/** Label for the data-age chip, saying WHICH age it is so the two never blur. */
+export function dataAgeLabel(
+  tapeAgeSec: number | null,
+  provider: string,
+  mock: boolean,
+): string {
+  if (mock) return "synthetic";
+  if (tapeAgeSec !== null) return `tape ${ageLabel(tapeAgeSec)}`;
+  return provider === "uw" ? "tape age unknown" : "~15m delayed";
 }
 
 export function ageLabel(ageSec: number | null): string {

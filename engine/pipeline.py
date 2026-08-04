@@ -155,6 +155,15 @@ def build_snapshot(ticker: str = None) -> dict:
         "mock": config.USE_MOCK_DATA,
         "provider": config.PROVIDER,
         "sources": market.get("sources"),
+        # WHEN THE MARKET DATA IS FROM, which is not when we fetched it. The UI
+        # derived staleness from `generated_at` alone, so a snapshot built one
+        # second ago read "live" whether the price underneath it was one second
+        # or fifteen minutes old — the age chip was measuring our own promptness
+        # and presenting it as the freshness of the market. UW stamps its tape
+        # server-side; Yahoo offers nothing equivalent, and null here is the
+        # honest answer for it rather than a number we made up.
+        "tape_time": market.get("tape_time"),
+        "market_time": market.get("market_time"),
         "uw_errors": market.get("uw_errors") or {},
         "flow_alerts": market.get("flow_alerts"),
         "darkpool": market.get("darkpool"),

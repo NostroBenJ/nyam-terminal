@@ -121,7 +121,26 @@ def api_health():
         "provider": "mock" if config.USE_MOCK_DATA else config.PROVIDER,
         "uw_key_set": bool(config.UW_API_KEY),
         "anthropic_key_set": bool(config.ANTHROPIC_API_KEY),
+        "uw_budget": _uw_budget(),
     }
+
+
+def _uw_budget():
+    """
+    Today's UW request usage, or None when UW isn't the provider.
+
+    Surfaced because the daily cap (30,000) is comfortable at one ticker on a
+    five-minute refresh (~2,000/day) and stops being comfortable quickly if
+    either of those changes. A limit you only find out about by hitting it is
+    one you hit during a session, so the number belongs on screen.
+    """
+    if config.USE_MOCK_DATA or config.PROVIDER != "uw":
+        return None
+    try:
+        from data import unusual_whales as uw
+        return uw.budget()
+    except Exception:
+        return None
 
 
 @app.get("/api/paths")

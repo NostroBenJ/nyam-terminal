@@ -108,6 +108,12 @@ export interface Snapshot {
   mock: boolean;
   provider: string;
   sources?: Record<string, string> | null;
+  /** Provider's server-side stamp for the market data itself, ISO-8601 UTC.
+   *  Null on feeds that publish no such thing (Yahoo) — the honest answer, and
+   *  the UI then says "delayed" rather than inventing an age. */
+  tape_time?: string | null;
+  /** "premarket" | "market" | "postmarket", when the provider reports it. */
+  market_time?: string | null;
   uw_errors: Record<string, string>;
   level_check: LevelCheckRow[] | null;
   gex: Gex;
@@ -441,6 +447,16 @@ export interface Health {
   provider: string;
   uw_key_set: boolean;
   anthropic_key_set: boolean;
+  /** Today's UW request usage. Null unless UW is the live provider. */
+  uw_budget?: UwBudget | null;
+}
+
+export interface UwBudget {
+  used: number;
+  limit: number;
+  remaining: number;
+  pct: number;
+  date: string;
 }
 
 /* --------------------------------------------------------------- client -- */
