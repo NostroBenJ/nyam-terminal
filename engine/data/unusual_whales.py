@@ -33,9 +33,85 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+import config
+
 BASE = "https://api.unusualwhales.com"
-API_KEY = os.getenv("UW_API_KEY", "")
 TIMEOUT = 20
+USER_AGENT = "nyam-terminal/1.0 (personal research client)"
+
+
+def api_key() -> str:
+    """
+    The UW key, resolved at CALL time rather than import time.
+
+    Deliberately not a module-level constant. `config` reads `engine/.env` into
+    the environment as an import side effect, so a constant captured up here is
+    empty or populated depending purely on whether config happened to be
+    imported first. That is not a hypothetical: it is exactly how `probe`
+    reported "UW_API_KEY is not set" with the key sitting in .env — this module
+    is importable without ever pulling in config, so nothing loaded the file.
+    It worked inside the server only because server.py imports config earlier.
+
+    Reading through config (which has already loaded .env) with a live os.getenv
+    fallback makes the answer independent of import order.
+    """
+    return config.UW_API_KEY or os.getenv("UW_API_KEY", "")
+
+
+# ---------------------------------------------------------------------------
+# request budget
+# ---------------------------------------------------------------------------
+# UW allows 30,000 requests/day (x-uw-token-req-limit); the per-minute headroom
+# is effectively unlimited, so the daily count is the only real constraint. One
+# full refresh of one ticker costs ~35 requests, 28 of which are the paged chain
+# walk — so the budget is comfortable until either the refresh interval drops or
+# the ticker list grows, and then it moves fast. Counted rather than estimated,
+# because "I did the arithmetic once" is how you find out you were wrong at 3pm
+# with the board frozen. Persisted so a restart doesn't reset the day's tally.
+DAILY_LIMIT = 30000
+_counter = {"date": None, "count": 0}
+
+
+def _counter_path() -> str:
+    return os.path.join(config.STORE_DIR, "uw_requests.json")
+
+
+def _bump():
+    today = dt.date.today().isoformat()
+    if _counter["date"] != today:
+        _counter.update(_load_counter(today))
+    _counter["count"] += 1
+    try:
+        os.makedirs(config.STORE_DIR, exist_ok=True)
+        with open(_counter_path(), "w", encoding="utf-8") as f:
+            json.dump(_counter, f)
+    except OSError:
+        pass  # a budget counter must never be able to take the engine down
+
+
+def _load_counter(today: str) -> dict:
+    try:
+        with open(_counter_path(), encoding="utf-8") as f:
+            saved = json.load(f)
+        if saved.get("date") == today:
+            return {"date": today, "count": int(saved.get("count", 0))}
+    except (OSError, ValueError):
+        pass
+    return {"date": today, "count": 0}
+
+
+def budget() -> dict:
+    """Today's request usage. Safe to call with no key set."""
+    today = dt.date.today().isoformat()
+    c = _counter if _counter["date"] == today else _load_counter(today)
+    used = c["count"]
+    return {
+        "used": used,
+        "limit": DAILY_LIMIT,
+        "remaining": max(DAILY_LIMIT - used, 0),
+        "pct": round(used / DAILY_LIMIT * 100, 1),
+        "date": today,
+    }
 
 
 class UWError(RuntimeError):
@@ -65,7 +141,7 @@ def _i(d: dict, key: str, default=0) -> int:
 
 def _get(path: str, params: dict = None, key: str = None) -> dict:
     """GET an endpoint and return the parsed body. Raises UWError on failure."""
-    key = key or API_KEY
+    key = key or api_key()
     if not key:
         raise UWError("UW_API_KEY is not set")
     url = BASE + path
@@ -76,15 +152,31 @@ def _get(path: str, params: dict = None, key: str = None) -> dict:
     req = urllib.request.Request(url, headers={
         "Authorization": f"Bearer {key}",
         "Accept": "application/json",
+        # REQUIRED. Not politeness — urllib's default "Python-urllib/3.x" is
+        # rejected by UW's Cloudflare edge with error 1010 ("blocked based on
+        # your browser's signature") before the request reaches the API at all.
+        # Every endpoint 403s with a valid key. Any real UA string returns 200;
+        # tested against urllib-default / curl / browser, only the default
+        # fails. Identifying honestly works, so there is no reason to pretend
+        # to be a browser.
+        "User-Agent": USER_AGENT,
     })
+    _bump()
     try:
         with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
             return json.loads(r.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8", "replace")[:300]
-        # 403 here almost always means "your tier doesn't include this endpoint"
-        # rather than a bad key — worth distinguishing in the message.
-        hint = " (tier may not include this endpoint)" if e.code == 403 else ""
+        # A 403 has two very different causes and guessing wrong sends you
+        # hunting the wrong problem — the first version of this line blamed the
+        # tier for what was actually a Cloudflare block, which reads as "you
+        # need to pay more" when the real fix is a header. Cloudflare's own
+        # error codes are in the body, so read them instead of assuming.
+        hint = ""
+        if e.code == 403:
+            hint = (" (Cloudflare edge block, not your tier — check User-Agent)"
+                    if "error_code\":1010" in body.replace(" ", "")
+                    else " (tier may not include this endpoint)")
         raise UWError(f"HTTP {e.code} on {path}{hint}: {body}", status=e.code) from e
     except urllib.error.URLError as e:
         raise UWError(f"network error on {path}: {e.reason}") from e
@@ -101,9 +193,54 @@ def _rows(body: dict) -> list:
 # ---------------------------------------------------------------------------
 # endpoints  (paths verified against the published OpenAPI spec)
 # ---------------------------------------------------------------------------
-def option_contracts(ticker: str, **q) -> list:
-    """GET /api/stock/{ticker}/option-contracts — the full chain."""
-    return _rows(_get(f"/api/stock/{ticker.upper()}/option-contracts", q))
+PAGE_SIZE = 500          # UW's hard cap; larger `limit` values are ignored
+MAX_PAGES = 60           # 30k contracts — far beyond any single underlying
+
+
+def option_contracts(ticker: str, max_pages: int = MAX_PAGES, **q) -> list:
+    """
+    GET /api/stock/{ticker}/option-contracts — the full chain, ALL pages.
+
+    THE PAGINATION IS NOT OPTIONAL. UW caps a page at 500 contracts and simply
+    ignores a larger `limit` (asking for 5000 returns 500, with no error and no
+    "truncated" flag). SPY's real chain is ~14,000 contracts, so the obvious
+    single call returns under 4% of it — and the failure is invisible: you get
+    a well-formed chain, GEX computes happily, and every level is wrong because
+    most of the open interest was never in the sum.
+
+    Ends only on an EMPTY page. A short page does NOT mean end-of-data: UW
+    intermittently returns a partial page mid-walk, and treating that as the end
+    truncated SPY's chain from 13,958 contracts to 10,124 (20 full pages plus a
+    124-row page) on one run while three identical walks moments later each
+    returned the full 13,958. Nothing about the short result distinguishes it
+    from a real ending, so the only safe stop condition is a page with no rows
+    at all. This cost one extra request and bought back 27% of the open
+    interest.
+
+    `max_pages` is a runaway guard, and hitting it is a real anomaly worth
+    surfacing rather than absorbing.
+    """
+    out, seen = [], set()
+    for page in range(max_pages):
+        params = dict(q)
+        params.setdefault("limit", PAGE_SIZE)
+        params["page"] = page
+        rows = _rows(_get(f"/api/stock/{ticker.upper()}/option-contracts", params))
+        if not rows:
+            return out
+        for c in rows:
+            # UW pages by offset; a chain changing underneath a multi-page walk
+            # can hand back a contract twice, which would double-count its OI.
+            sym = c.get("option_symbol") or c.get("option_chain")
+            if sym and sym in seen:
+                continue
+            if sym:
+                seen.add(sym)
+            out.append(c)
+    raise UWError(
+        f"option-contracts still full after {max_pages} pages "
+        f"({len(out)} contracts) — refusing to return a possibly truncated chain"
+    )
 
 
 def greek_exposure_by_strike(ticker: str, **q) -> list:
@@ -299,7 +436,8 @@ def probe(ticker: str = "SPY") -> dict:
     trusting any of the above.
     """
     print(f"Probing Unusual Whales with {ticker}...")
-    print(f"key: {'set (%d chars)' % len(API_KEY) if API_KEY else 'NOT SET — export UW_API_KEY'}\n")
+    _k = api_key()
+    print(f"key: {'set (%d chars)' % len(_k) if _k else 'NOT SET — export UW_API_KEY'}\n")
     results = {}
     for name, fn in CHECKS:
         try:

@@ -255,7 +255,7 @@ def _uw_market(ticker: str) -> dict:
     from data import unusual_whales as uw
 
     market = _live_market(ticker)          # Yahoo baseline: OHLC + confirmer
-    market["sources"] = {"chain": "yahoo", "levels": "yahoo",
+    market["sources"] = {"chain": "yahoo", "levels": "yahoo", "spot": "yahoo",
                          "flow": None, "darkpool": None, "uw_levels": None}
     market["uw_errors"] = {}
 
@@ -265,6 +265,22 @@ def _uw_market(ticker: str) -> dict:
         except Exception as e:                       # incl. uw.UWError
             market["uw_errors"][name] = str(e)
             return None
+
+    # SPOT FIRST, and it is not a detail. Gamma is a function of spot, so a
+    # real-time chain priced against Yahoo's ~15-minute-delayed last price is
+    # not "mostly live" — it is a live chain evaluated at the wrong price, and
+    # every strike-relative output (flip, walls, which side of them price sits
+    # on, the whole bias) inherits that error while the UI reports the chain as
+    # live. UW's stock-state carries a server-side `tape_time`, so the age of
+    # this number is a measured fact rather than an assumption about the feed.
+    st = _try("spot", lambda: uw.stock_state(ticker))
+    if st:
+        px = uw._f(st, "close")
+        if px > 0:
+            market["primary"]["spot"] = round(px, 2)
+            market["sources"]["spot"] = "unusual_whales"
+            market["tape_time"] = st.get("tape_time")
+            market["market_time"] = st.get("market_time")
 
     contracts = _try("chain", lambda: uw.option_contracts(
         ticker, exclude_zero_oi_chains=True))
