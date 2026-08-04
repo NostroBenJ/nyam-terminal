@@ -128,7 +128,14 @@ def _news_for(ticker: str, market: dict) -> dict:
     return risk
 
 
-def build_snapshot(ticker: str = None) -> dict:
+def build_snapshot(ticker: str = None, with_brief: bool = True) -> dict:
+    """
+    Build the full board for `ticker`.
+
+    `with_brief=False` returns everything except the written brief, which is
+    the expensive part and the only part nothing else depends on. See the
+    comment at the brief call for the measurements.
+    """
     market = get_market(ticker)
     p, s = market["primary"], market["secondary"]
     r = config.RISK_FREE_RATE
@@ -173,7 +180,24 @@ def build_snapshot(ticker: str = None) -> dict:
 
     news = _news_for(p["ticker"], market)
     bias = bias_engine.build_bias(gex, levels, smt, news, em=em, neg_zone=neg_zone)
-    brief = generate_brief_meta(bias, gex, levels, smt, news, p["ticker"])
+
+    # THE BRIEF DOES NOT BLOCK THE BOARD. Measured on a cold snapshot: the whole
+    # build is 19.6s, of which the Claude call is 13.9s — the remaining 5.7s is
+    # the UW fetch and the maths. So for fourteen seconds the app had every
+    # level, the bias and the matrix computed, and showed a spinner while
+    # waiting on prose.
+    #
+    # Nothing downstream reads the brief: it is commentary written FROM the
+    # bias, not an input to it. So it is generated after the fact by the caller
+    # and patched into the cached snapshot when it lands. `with_brief=True`
+    # keeps the synchronous path for the scheduled log and the capture
+    # recorder, which write a file once and genuinely want the finished text.
+    if with_brief:
+        brief = generate_brief_meta(bias, gex, levels, smt, news, p["ticker"])
+    else:
+        brief = {"text": "", "source": "pending", "model": "", "error": None,
+                 "cached": False, "age_s": None, "calls_today": None,
+                 "budget_capped": False}
 
     # --- the actionable layer ----------------------------------------------
     grid = matrix.build(per_expiry, p["spot"])

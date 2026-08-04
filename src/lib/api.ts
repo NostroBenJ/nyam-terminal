@@ -127,6 +127,16 @@ export interface Snapshot {
   tape_time?: string | null;
   /** "premarket" | "market" | "postmarket", when the provider reports it. */
   market_time?: string | null;
+  /**
+   * True when this board was read from disk at startup rather than built now.
+   * It is a REAL board from a past session, not a placeholder — which is
+   * exactly why it must be labelled: last session's levels look identical to
+   * this session's and are wrong. `generated_at` is deliberately left at its
+   * original value so every staleness check keeps measuring the real age.
+   */
+  restored?: boolean;
+  restored_from?: string | null;
+  restored_age_days?: number | null;
   uw_errors: Record<string, string>;
   level_check: LevelCheckRow[] | null;
   gex: Gex;

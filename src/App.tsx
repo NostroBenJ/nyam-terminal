@@ -500,6 +500,18 @@ export default function App() {
           Mock data. Every number on this screen is synthetic and reflects no live market.
         </div>
       )}
+      {/* A restored board is a REAL board from a previous session, which is
+          exactly what makes it dangerous: last session's levels look identical
+          to this session's and are wrong. It is shown because painting it in
+          0.8s beats an empty window for nine seconds — but never without
+          saying so, and the banner clears the moment a live build lands. */}
+      {snap.restored && (
+        <div className="banner banner--warn">
+          Showing the last saved board from {snap.restored_from}
+          {snap.restored_age_days ? ` (${snap.restored_age_days} day${snap.restored_age_days === 1 ? "" : "s"} old)` : ""} —
+          these are not current levels. Refreshing now.
+        </div>
+      )}
 
       <div className="shell">
         <Sidebar active={section} onSelect={goSection} />

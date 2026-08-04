@@ -13,6 +13,25 @@ export function Brief({ snap }: { snap: Snapshot }) {
   const meta = snap.brief_meta;
   const fromClaude = meta?.source === "claude";
 
+  // The brief no longer blocks the board: it costs ~14s of a cold build and
+  // nothing else depends on it, so the levels arrive first and the prose
+  // follows. Saying "still writing" is the honest rendering of that gap — an
+  // empty panel would read as "there is nothing to say about today".
+  if (meta?.source === "pending") {
+    return (
+      <div className="brief">
+        <div className="brief__head">
+          <span className="chip chip--quiet">WRITING…</span>
+        </div>
+        <p className="brief__pending">
+          The board is complete and current — every level, the bias and the
+          matrix are computed. Only the written commentary is still being
+          generated, and it will appear here on the next refresh.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="brief">
       <div className="brief__head">

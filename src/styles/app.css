@@ -266,6 +266,13 @@ code {
   cursor: help;
 }
 
+.brief__pending {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
 /* ----------------------------------------------------------------- crash -- */
 /* Deliberately loud and self-contained: it must render even if the failure is
    in the layout system itself, so it depends on as few tokens as possible. */

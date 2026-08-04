@@ -38,7 +38,8 @@ from logging_obsidian import log_to_obsidian
 from analysis import tracker
 import store as store_mod
 from analysis import sessions
-from data import calendar_feed, flow, news_feed
+from claude_brief import generate_brief_meta
+from data import calendar_feed, flow, news_feed, snapshot_store
 from data.data_sources import get_ohlc, get_bars
 
 DEFAULT_PORT = 8765
@@ -75,19 +76,81 @@ _latest = {}                                   # ticker -> snapshot
 _running = {"on": True}                        # live-feed toggle
 _active = {"ticker": config.PRIMARY_TICKER}    # what the scheduler refreshes
 _lock = threading.Lock()
+_brief_jobs = {}                               # ticker -> brief thread in flight
 
 # News caching lives in news_feed so the snapshot pipeline shares one cache
 # with this HTTP layer rather than each pulling the same 12 feeds.
 NEWS_TTL = 180                                 # seconds
 
 
-def refresh(ticker: str = None) -> dict:
+def refresh(ticker: str = None, with_brief: bool = False) -> dict:
+    """
+    Rebuild a ticker's board and publish it.
+
+    The brief is generated AFTER publishing, on a worker thread, because it
+    costs 13.9s of a 19.6s cold build and nothing else depends on it. The board
+    is complete and correct the moment this returns; the prose arrives a few
+    seconds later and is patched into the cached snapshot in place.
+
+    `with_brief=True` restores the blocking path for callers that write a file
+    once and want the finished text in it — the scheduled log and the recorder.
+    """
     ticker = (ticker or _active["ticker"]).upper()
-    snap = build_snapshot(ticker)
+    snap = build_snapshot(ticker, with_brief=with_brief)
     tracker.record_prediction(snap)            # saves once per day per ticker
     with _lock:
         _latest[ticker] = snap
+    snapshot_store.save(ticker, snap)
+    if not with_brief:
+        _start_brief(ticker, snap)
     return snap
+
+
+def _start_brief(ticker: str, snap: dict):
+    """
+    Generate the brief off the critical path and patch it into the cache.
+
+    Patches the CACHED snapshot rather than the one already returned to a
+    caller: whoever triggered this refresh has their copy and is not waiting.
+    The next poll picks up the prose.
+
+    Guarded so two refreshes of the same ticker cannot both call Claude — that
+    would be paid work done twice for one result, and the budget limiter in
+    claude_brief counts calls, not answers.
+    """
+    with _lock:
+        if _brief_jobs.get(ticker):
+            return
+        _brief_jobs[ticker] = True
+
+    def _work():
+        try:
+            meta = generate_brief_meta(
+                snap["bias"], snap["gex"], snap["levels"], snap["smt"],
+                snap["news"], ticker)
+            with _lock:
+                cur = _latest.get(ticker)
+                # Only patch if the cached snapshot is still the one this brief
+                # was written about. A refresh that landed meanwhile has newer
+                # levels, and prose describing the old ones would read as
+                # current commentary on numbers that have moved.
+                if cur is not None and cur.get("generated_at") == snap.get("generated_at"):
+                    cur["brief"] = meta["text"]
+                    cur["brief_meta"] = {k: v for k, v in meta.items() if k != "text"}
+                    snapshot_store.save(ticker, cur)
+        except Exception as e:                       # noqa: BLE001
+            with _lock:
+                cur = _latest.get(ticker)
+                if cur is not None:
+                    cur["brief_meta"] = dict(cur.get("brief_meta") or {},
+                                             source="error", error=str(e))
+            print(f"[warn] brief failed for {ticker}: {type(e).__name__}: {e}",
+                  file=sys.stderr, flush=True)
+        finally:
+            with _lock:
+                _brief_jobs.pop(ticker, None)
+
+    threading.Thread(target=_work, name=f"brief-{ticker}", daemon=True).start()
 
 
 def scheduled_refresh():
@@ -96,7 +159,8 @@ def scheduled_refresh():
 
 
 def scheduled_log():
-    snap = refresh()
+    # Writes a file once and wants the finished prose in it, so this one waits.
+    snap = refresh(with_brief=True)
     path = log_to_obsidian(snap)
     print(f"[{dt.datetime.now(config.TZ)}] Logged NYAM bias -> {path}", flush=True)
 
@@ -514,6 +578,17 @@ def main():
 
     tracker.ensure_seeded()
     tracker.grade_pending(get_ohlc)            # grade any past, ungraded calls
+
+    # Restore the last saved boards BEFORE binding, so /api/bias answers on the
+    # first request instead of blocking a cold build. Each is flagged
+    # `restored` and keeps its original generated_at, so the UI shows it as
+    # what it is: the last board, being replaced right now.
+    restored = snapshot_store.load_all(config.TICKERS)
+    if restored:
+        with _lock:
+            _latest.update(restored)
+        print(f"restored {len(restored)} saved board(s): "
+              f"{', '.join(sorted(restored))}", flush=True)
 
     if not args.no_warm:
         # Warm the cache IN THE BACKGROUND so the port opens immediately.
