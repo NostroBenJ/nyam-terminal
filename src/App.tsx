@@ -6,6 +6,9 @@ import { Panel, Empty } from "./components/Panel";
 import { TopBar } from "./components/TopBar";
 import { UwBudget } from "./components/UwBudget";
 import { DarkPool } from "./components/DarkPool";
+import { GexMatrix } from "./components/GexMatrix";
+import { NetFlow } from "./components/NetFlow";
+import { TodaysTrade } from "./components/TodaysTrade";
 import { Sidebar, SECTIONS, type SectionId } from "./components/Sidebar";
 import { GexProfile } from "./components/GexProfile";
 import { PriceChart } from "./components/PriceChart";
@@ -193,8 +196,17 @@ export default function App() {
               </Panel>
             </div>
             <div className="grid__col">
+              {/* Top of the right column, above everything: the one-glance
+                  answer. Composed from plan + bias rather than computing
+                  anything new — a second place that derives a trade is a
+                  second place that can disagree with the first. */}
+              <TodaysTrade snap={snap!} />
               <Panel title="Session" subtitle="where you are in the day">
                 <SessionClock compact />
+              </Panel>
+              <Panel title="Net premium" subtitle={`${snap!.ticker} · calls minus puts, today`}
+                     {...panelProps}>
+                <NetFlow flow={snap!.net_flow} />
               </Panel>
               <Panel title="Bias" subtitle={`confirmed vs ${snap!.confirmer}`} {...panelProps}>
                 <BiasPanel bias={snap!.bias} />
@@ -230,6 +242,11 @@ export default function App() {
               </Panel>
             </div>
             <div className="grid__col">
+              <Panel title="Gamma matrix"
+                     subtitle={`strike × expiry · ${snap!.matrix?.loaded ?? 0} expiries`}
+                     {...panelProps}>
+                <GexMatrix grid={snap!.matrix} />
+              </Panel>
               <Panel title="Level map" subtitle="high to low" {...panelProps}>
                 <LevelMap rows={snap!.level_map} spot={snap!.gex.spot} />
               </Panel>

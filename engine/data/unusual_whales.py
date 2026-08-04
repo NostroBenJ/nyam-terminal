@@ -474,6 +474,75 @@ def overnight_range(ticker: str, prior: dict, tz, now_et: dt.datetime = None) ->
     return max(highs), min(lows), True
 
 
+def net_prem_ticks(ticker: str) -> list:
+    """GET /api/stock/{ticker}/net-prem-ticks — per-minute net premium.
+
+    Carries net_call_premium / net_put_premium / net_delta plus the bid-side
+    and ask-side volume split, which is what makes it directional rather than
+    just busy."""
+    return _rows(_get(f"/api/stock/{ticker.upper()}/net-prem-ticks", {}))
+
+
+def summarize_net_flow(rows: list, points: int = 78) -> dict:
+    """
+    Collapse the per-minute tape into a directional read plus a sparkline.
+
+    NET PREMIUM, NOT VOLUME. Volume counts contracts and says a strike was
+    busy; premium counts dollars committed and says how much someone was
+    willing to pay to be right. A million contracts of worthless OTM calls and
+    one large ITM block are the same on a volume chart and nothing alike here.
+
+    `net` is call premium minus put premium, the common composite: positive
+    means dollars are going into calls faster than into puts. It is a flow
+    reading, not a forecast, and the panel says so.
+
+    The series is DOWNSAMPLED BY SUMMING, never by sampling. Taking every nth
+    tick would drop whole minutes of premium and the cumulative line would end
+    somewhere the day never went.
+    """
+    if not rows:
+        return {"available": False, "note": "no net premium ticks"}
+
+    # UW returns newest-first; the cumulative walk has to run forward in time.
+    ordered = sorted(rows, key=lambda r: str(r.get("tape_time") or ""))
+
+    call_prem = sum(_f(r, "net_call_premium") for r in ordered)
+    put_prem = sum(_f(r, "net_put_premium") for r in ordered)
+    call_ask = sum(_i(r, "call_volume_ask_side") for r in ordered)
+    call_bid = sum(_i(r, "call_volume_bid_side") for r in ordered)
+    put_ask = sum(_i(r, "put_volume_ask_side") for r in ordered)
+    put_bid = sum(_i(r, "put_volume_bid_side") for r in ordered)
+
+    bucket = max(1, len(ordered) // max(points, 1))
+    series, running = [], 0.0
+    for i in range(0, len(ordered), bucket):
+        chunk = ordered[i:i + bucket]
+        running += sum(_f(r, "net_call_premium") - _f(r, "net_put_premium")
+                       for r in chunk)
+        series.append({"t": chunk[-1].get("tape_time"), "v": round(running, 2)})
+
+    return {
+        "available": True,
+        "net": round(call_prem - put_prem, 2),
+        "call_premium": round(call_prem, 2),
+        "put_premium": round(put_prem, 2),
+        "net_delta": round(sum(_f(r, "net_delta") for r in ordered), 2),
+        # Ask-side buying is aggressive; bid-side is someone being hit. The
+        # ratio separates "calls traded" from "calls were bought".
+        "call_ask_pct": round(call_ask / (call_ask + call_bid) * 100, 1)
+                        if (call_ask + call_bid) else None,
+        "put_ask_pct": round(put_ask / (put_ask + put_bid) * 100, 1)
+                       if (put_ask + put_bid) else None,
+        "series": series,
+        "ticks": len(ordered),
+    }
+
+
+def max_pain(ticker: str) -> list:
+    """GET /api/stock/{ticker}/max-pain — per-expiry max pain strike."""
+    return _rows(_get(f"/api/stock/{ticker.upper()}/max-pain", {}))
+
+
 def headlines(limit: int = 40, ticker: str = None) -> list:
     """GET /api/news/headlines. Fields: headline, source, created_at,
     sentiment, is_major, tickers, tags."""

@@ -178,6 +178,9 @@ export interface Snapshot {
   };
   trend: { arrow: string; text: string; cls: string };
   flow_alerts: unknown[] | null;
+  net_flow: NetFlow | null;
+  max_pain: Array<{ expiry: string; strike: number }> | null;
+  matrix: GexMatrix | null;
   darkpool: DarkPoolPrint[] | null;
 }
 
@@ -452,6 +455,36 @@ export interface Health {
   anthropic_key_set: boolean;
   /** Today's UW request usage. Null unless UW is the live provider. */
   uw_budget?: UwBudget | null;
+}
+
+export interface NetFlow {
+  available: boolean;
+  note?: string;
+  /** Call premium minus put premium, in dollars. */
+  net: number;
+  call_premium: number;
+  put_premium: number;
+  net_delta: number;
+  /** Share of volume that traded at the ask — aggressive buying. Null if none. */
+  call_ask_pct: number | null;
+  put_ask_pct: number | null;
+  series: Array<{ t: string | null; v: number }>;
+  ticks: number;
+}
+
+export interface GexMatrix {
+  expiries: Array<{ label: string; dte: number | null }>;
+  rows: Array<{
+    strike: number;
+    /** One cell per expiry, aligned to `expiries`. Null = no open interest. */
+    cells: Array<number | null>;
+    total: number;
+    at_spot: boolean;
+  }>;
+  /** Grid-wide magnitude for a single shared colour scale. */
+  max_abs: number;
+  spot: number;
+  loaded: number;
 }
 
 export interface DarkPoolPrint {

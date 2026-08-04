@@ -204,6 +204,8 @@ def build_snapshot(ticker: str = None) -> dict:
         "uw_errors": market.get("uw_errors") or {},
         "flow_alerts": market.get("flow_alerts"),
         "darkpool": market.get("darkpool"),
+        "net_flow": market.get("net_flow"),
+        "max_pain": market.get("max_pain"),
         "level_check": _cross_check(gex, market.get("uw_levels")),
         "matrix": grid,
         "plan": trade_plan,

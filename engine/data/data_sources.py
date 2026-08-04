@@ -305,6 +305,21 @@ def _uw_market(ticker: str) -> dict:
         market["darkpool"] = uw.summarize_darkpool(dp)
         market["sources"]["darkpool"] = "unusual_whales"
 
+    nf = _try("net_flow", lambda: uw.net_prem_ticks(ticker))
+    if nf:
+        market["net_flow"] = uw.summarize_net_flow(nf)
+        market["sources"]["net_flow"] = "unusual_whales"
+
+    mp = _try("max_pain", lambda: uw.max_pain(ticker))
+    if mp:
+        # Nearest expiry only. The far-dated rows are real but not actionable
+        # today, and showing eight of them buries the one that matters.
+        rows = sorted(mp, key=lambda r: str(r.get("expiry") or ""))
+        market["max_pain"] = [{"expiry": r.get("expiry"),
+                               "strike": uw._f(r, "max_pain")}
+                              for r in rows[:3] if uw._f(r, "max_pain") > 0]
+        market["sources"]["max_pain"] = "unusual_whales"
+
     market["oi_report"] = _uw_oi_report(ticker, market)
     return market
 
