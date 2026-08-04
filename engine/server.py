@@ -20,6 +20,7 @@ no functional gain, so engine/ stays its own root and is run from inside itself.
 """
 import argparse
 import datetime as dt
+import json
 import os
 import sys
 import threading
@@ -404,6 +405,66 @@ async def api_chat(request: Request):
 def api_log():
     scheduled_log()
     return {"status": "logged"}
+
+
+@app.post("/api/client-error")
+async def api_client_error(request: Request):
+    """
+    Record a frontend crash to disk.
+
+    Exists because a React render error unmounts the tree and leaves an empty
+    window painted in the theme background — which reads as "the app is blank"
+    and carries no information at all. The packaged build has no devtools and
+    no console the user can reach, so without this the only evidence a crash
+    ever happened is a dark rectangle.
+
+    Deliberately append-only and never rotated on write: the interesting crash
+    is usually the FIRST one, and a log that drops history to stay tidy loses
+    exactly the entry worth having. Fails silently rather than raising; an
+    error reporter that can itself error is a second bug on top of the first.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    entry = {
+        "at": dt.datetime.now(config.TZ).strftime("%Y-%m-%d %H:%M:%S %Z"),
+        "message": str(body.get("message", ""))[:2000],
+        "stack": str(body.get("stack", ""))[:6000],
+        "component": str(body.get("component", ""))[:4000],
+        "section": str(body.get("section", ""))[:80],
+        "ticker": str(body.get("ticker", ""))[:20],
+        "theme": str(body.get("theme", ""))[:40],
+        "ua": str(body.get("ua", ""))[:400],
+    }
+    try:
+        os.makedirs(config.STORE_DIR, exist_ok=True)
+        path = os.path.join(config.STORE_DIR, "client_errors.log")
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry) + "\n")
+    except OSError:
+        pass
+    return {"status": "recorded"}
+
+
+@app.get("/api/client-error")
+def api_client_error_list(limit: int = 20):
+    """The most recent frontend crashes, newest first. For the Sources panel."""
+    path = os.path.join(config.STORE_DIR, "client_errors.log")
+    out = []
+    try:
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    try:
+                        out.append(json.loads(line))
+                    except ValueError:
+                        continue
+    except OSError:
+        return {"errors": [], "path": path}
+    return {"errors": list(reversed(out))[:limit], "path": path,
+            "total": len(out)}
 
 
 # ---------------------------------------------------------------------------

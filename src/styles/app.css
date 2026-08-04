@@ -266,6 +266,45 @@ code {
   cursor: help;
 }
 
+/* ----------------------------------------------------------------- crash -- */
+/* Deliberately loud and self-contained: it must render even if the failure is
+   in the layout system itself, so it depends on as few tokens as possible. */
+
+.crash {
+  height: 100%;
+  overflow: auto;
+  padding: 34px 40px;
+  background: #131722;
+  color: #e6e8ea;
+  font: 400 13px/1.55 ui-sans-serif, system-ui, sans-serif;
+}
+.crash__title { margin: 0 0 6px; font-size: 19px; font-weight: 650; color: #ef5350; }
+.crash__lead { margin: 0 0 20px; color: #a9b2bd; max-width: 70ch; }
+.crash__box { margin-bottom: 16px; }
+.crash__label {
+  margin-bottom: 5px;
+  font: 600 9.5px/1 ui-monospace, monospace;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: #6b7684;
+}
+.crash__pre {
+  margin: 0;
+  padding: 11px 13px;
+  max-height: 260px;
+  overflow: auto;
+  border: 1px solid #2a2e39;
+  border-radius: 4px;
+  background: #0d1017;
+  font: 400 11.5px/1.5 ui-monospace, monospace;
+  color: #d5dae0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.crash__actions { display: flex; gap: 9px; margin: 20px 0 14px; }
+.crash__hint { margin: 0; font-size: 11.5px; color: #6b7684; }
+.crash__hint code { font-family: ui-monospace, monospace; color: #a9b2bd; }
+
 /* --------------------------------------------------------- todays trade -- */
 
 .tt {
