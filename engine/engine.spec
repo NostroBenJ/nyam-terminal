@@ -16,6 +16,12 @@ block_cipher = None
 # uvicorn and yfinance resolve a lot of their machinery at runtime, so static
 # analysis misses it. Each of these is an import PyInstaller cannot see.
 hidden = [
+    # Imported lazily inside functions so the engine boots without them, which
+    # also means PyInstaller's static analysis never sees them. `anthropic` was
+    # missed exactly this way and the packaged build reported "no key" with a
+    # key sitting right there. Anything imported inside a function goes here.
+    "data.uw_socket",
+    "data.unusual_whales",
     "uvicorn.logging",
     "uvicorn.loops",
     "uvicorn.loops.auto",

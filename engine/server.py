@@ -122,7 +122,24 @@ def api_health():
         "uw_key_set": bool(config.UW_API_KEY),
         "anthropic_key_set": bool(config.ANTHROPIC_API_KEY),
         "uw_budget": _uw_budget(),
+        "uw_socket": _uw_socket_status(),
     }
+
+
+def _uw_socket_status():
+    """
+    WebSocket state, so the board can say which path it is actually on.
+
+    Matters because the two paths have different freshness: a live socket
+    pushes updates continuously, while REST is as fresh as the last poll. A UI
+    that cannot tell them apart would let a silently-dead socket read as live
+    data, which is the same class of bug as the fetch-age chip.
+    """
+    try:
+        from data import uw_socket
+        return uw_socket.status()
+    except Exception as e:  # noqa: BLE001
+        return {"state": "error", "error": f"{type(e).__name__}: {e}"}
 
 
 def _uw_budget():
