@@ -513,17 +513,50 @@ def summarize_flow(alerts: list, limit: int = 8) -> list:
     return out
 
 
-def summarize_darkpool(prints: list, limit: int = 8) -> list:
-    """Trim dark pool prints to the fields worth showing."""
+def summarize_darkpool(prints: list, limit: int = 12) -> list:
+    """
+    Trim dark pool prints to the fields worth showing, plus NBBO placement.
+
+    The raw rows carry nbbo_bid/nbbo_ask and the earlier version discarded
+    them, which threw away the only thing that makes a print readable. A block
+    printing at the ask is a buyer lifting; the same size at the bid is a
+    seller hitting. Without that, every row is just "someone traded".
+
+    `lean` is a HEURISTIC and labelled as one. Dark pool prints are reported
+    without an aggressor flag, so side is inferred from where the print sat in
+    the spread — the standard read, and still an inference. Prints exactly at
+    the midpoint get "mid" rather than being forced to a side, and a missing or
+    crossed NBBO gets None rather than a guess.
+    """
     out = []
     for p in prints[:limit]:
+        price = _f(p, "price")
+        bid, ask = _f(p, "nbbo_bid"), _f(p, "nbbo_ask")
+        lean, pos = None, None
+        if price > 0 and 0 < bid < ask:
+            # 0 = at bid, 1 = at ask.
+            pos = (price - bid) / (ask - bid)
+            pos = min(max(pos, 0.0), 1.0)
+            if pos >= 0.65:
+                lean = "buy"
+            elif pos <= 0.35:
+                lean = "sell"
+            else:
+                lean = "mid"
         out.append({
             "ticker": p.get("ticker"),
-            "price": _f(p, "price"),
+            "price": price,
             "size": _i(p, "size"),
             "premium": _f(p, "premium"),
             "at": p.get("executed_at"),
             "market_center": p.get("market_center"),
+            "nbbo_bid": bid or None,
+            "nbbo_ask": ask or None,
+            "spread_pos": round(pos, 3) if pos is not None else None,
+            "lean": lean,
+            # A cancelled print is not a trade. Shown rather than filtered, so
+            # a tape that is mostly cancellations cannot look like conviction.
+            "canceled": bool(p.get("canceled")),
         })
     return out
 

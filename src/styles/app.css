@@ -255,6 +255,55 @@ code {
    is what let "4s ago" read as a live price. Never colored by freshness. */
 .age--fetch { color: var(--dim); opacity: 0.75; }
 
+/* Marks a level whose two sides differ by definition rather than by error. */
+.lc__why {
+  margin-left: 6px;
+  padding: 1px 5px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font: 500 9px/1.4 var(--mono);
+  color: var(--dim);
+  cursor: help;
+}
+
+/* ------------------------------------------------------------ dark pool -- */
+
+.dp { display: flex; flex-direction: column; gap: 10px; }
+.dp__head { display: flex; gap: 26px; align-items: flex-start; }
+.dp__stat { display: flex; flex-direction: column; gap: 3px; }
+.dp__num { font: 600 16px/1.1 var(--mono); }
+
+.dp__spread { display: inline-flex; align-items: center; gap: 7px; }
+.dp__track {
+  position: relative;
+  display: inline-block;
+  width: 58px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--line);
+}
+.dp__dot {
+  position: absolute;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  margin: -3.5px 0 0 -3.5px;
+  border-radius: 50%;
+  background: var(--dim);
+}
+.dp__dot--buy  { background: var(--up); }
+.dp__dot--sell { background: var(--down); }
+.dp__dot--mid  { background: var(--accent); }
+
+.dp__lean { font: 500 10px/1 var(--mono); font-style: normal; color: var(--dim); }
+.dp__lean--buy  { color: var(--up); }
+.dp__lean--sell { color: var(--down); }
+.dp__lean--mid  { color: var(--accent); }
+
+/* Cancelled prints stay visible but must never read as executed volume. */
+.dp__row--void td { opacity: 0.45; text-decoration: line-through; }
+.dp__void { color: var(--down); font-size: 10px; text-decoration: none; }
+
 /* ------------------------------------------------------------ uw budget -- */
 
 .budget { display: flex; flex-direction: column; gap: 7px; }

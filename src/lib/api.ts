@@ -97,7 +97,10 @@ export interface LevelCheckRow {
   ours: number | null;
   uw: number | null;
   drift_pct?: number;
+  /** Null when a known definitional difference makes grading meaningless. */
   agree: boolean | null;
+  /** Why the two sides differ by design, when they do. */
+  note?: string | null;
 }
 
 export interface Snapshot {
@@ -175,7 +178,7 @@ export interface Snapshot {
   };
   trend: { arrow: string; text: string; cls: string };
   flow_alerts: unknown[] | null;
-  darkpool: unknown[] | null;
+  darkpool: DarkPoolPrint[] | null;
 }
 
 /** One OHLC bar. `time` is epoch SECONDS for intraday, "YYYY-MM-DD" for daily. */
@@ -449,6 +452,22 @@ export interface Health {
   anthropic_key_set: boolean;
   /** Today's UW request usage. Null unless UW is the live provider. */
   uw_budget?: UwBudget | null;
+}
+
+export interface DarkPoolPrint {
+  ticker: string | null;
+  price: number;
+  size: number;
+  premium: number;
+  at: string | null;
+  market_center: string | null;
+  nbbo_bid: number | null;
+  nbbo_ask: number | null;
+  /** 0 = printed at the bid, 1 = at the ask. Null when NBBO is missing. */
+  spread_pos: number | null;
+  /** Inferred from spread_pos — dark pool prints carry no aggressor flag. */
+  lean: "buy" | "sell" | "mid" | null;
+  canceled: boolean;
 }
 
 export interface UwBudget {

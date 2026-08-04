@@ -5,6 +5,7 @@ import { ageSeconds, ageLabel, freshness } from "./lib/format";
 import { Panel, Empty } from "./components/Panel";
 import { TopBar } from "./components/TopBar";
 import { UwBudget } from "./components/UwBudget";
+import { DarkPool } from "./components/DarkPool";
 import { Sidebar, SECTIONS, type SectionId } from "./components/Sidebar";
 import { GexProfile } from "./components/GexProfile";
 import { PriceChart } from "./components/PriceChart";
@@ -246,10 +247,22 @@ export default function App() {
                     <tbody>
                       {snap!.level_check.map((r) => (
                         <tr key={r.level}>
-                          <td className="levels__role">{r.level}</td>
+                          <td className="levels__role">
+                            {r.level}
+                            {/* A level with a known definitional difference is
+                                marked, not graded. Showing it as red drift
+                                every single day would train you to ignore the
+                                one panel meant to catch real breakage. */}
+                            {r.note && (
+                              <span className="lc__why" title={r.note}>
+                                by design
+                              </span>
+                            )}
+                          </td>
                           <td className="num">{r.ours ?? "—"}</td>
                           <td className="num">{r.uw ?? "—"}</td>
-                          <td className={`num levels__tag--${r.agree === false ? "down" : "up"}`}>
+                          <td className={`num ${r.agree === null ? "muted"
+                            : `levels__tag--${r.agree ? "up" : "down"}`}`}>
                             {r.drift_pct === undefined ? "—" : `${r.drift_pct}%`}
                           </td>
                         </tr>
@@ -285,12 +298,21 @@ export default function App() {
 
       case "flow":
         return (
-          <div className="view__single">
-            <Panel title="Flow scanner"
-                   subtitle={`${snap!.ticker} · every print, filterable`}
-                   right={pop("flow")} grow>
-              <FlowScanner ticker={snap!.ticker} />
-            </Panel>
+          <div className="grid">
+            <div className="grid__col">
+              <Panel title="Flow scanner"
+                     subtitle={`${snap!.ticker} · every print, filterable`}
+                     right={pop("flow")} grow>
+                <FlowScanner ticker={snap!.ticker} />
+              </Panel>
+            </div>
+            <div className="grid__col">
+              <Panel title="Dark pool"
+                     subtitle={`${snap!.ticker} · off-exchange prints, placed in the spread`}
+                     {...panelProps}>
+                <DarkPool prints={snap!.darkpool} />
+              </Panel>
+            </div>
           </div>
         );
 

@@ -23,30 +23,67 @@ def _cross_check(gex: dict, uw_levels: dict, tol: float = 0.004) -> list | None:
     """
     Compare our Black-Scholes levels against Unusual Whales' computed ones.
 
-    Both sides claim to measure the same thing and define it the same way, so
-    a disagreement means one of them is wrong — and you want to know that
-    before you trade off either. This does NOT overwrite our numbers with
-    theirs; two independent computations that agree are evidence, and one that
-    silently replaces the other is not.
+    Two independent computations agreeing is evidence; one silently replacing
+    the other is not. This never overwrites our numbers with theirs.
 
-    Returns None when UW levels aren't available (free provider, or the
-    endpoint isn't in your tier).
+    NOT EVERY DISAGREEMENT IS AN ERROR. An earlier version of this docstring
+    asserted both sides "define it the same way", and for the gamma flip that
+    is measurably false — see FLIP_NOTE. Flagging a definitional difference as
+    a drift failure trains you to ignore the one panel whose entire job is to
+    catch real breakage, so levels with a known definitional gap carry a note
+    and are excluded from the agree/disagree verdict rather than failing it
+    every single day.
+
+    Returns None when UW levels aren't available.
     """
     if not uw_levels:
         return None
-    pairs = [("Call Wall", gex.get("call_wall"), uw_levels.get("call_wall")),
-             ("Put Wall", gex.get("put_wall"), uw_levels.get("put_wall")),
-             ("Gamma Flip", gex.get("gamma_flip"), uw_levels.get("gamma_flip")),
-             ("Magnet", gex.get("control_node"), uw_levels.get("gamma_magnet"))]
+    pairs = [("Call Wall", gex.get("call_wall"), uw_levels.get("call_wall"), None),
+             ("Put Wall", gex.get("put_wall"), uw_levels.get("put_wall"), PUT_WALL_NOTE),
+             ("Gamma Flip", gex.get("gamma_flip"), uw_levels.get("gamma_flip"), FLIP_NOTE),
+             ("Magnet", gex.get("control_node"), uw_levels.get("gamma_magnet"), None)]
     out = []
-    for name, ours, theirs in pairs:
+    for name, ours, theirs, note in pairs:
+        row = {"level": name, "ours": ours, "uw": theirs, "note": note}
         if ours is None or theirs is None:
-            out.append({"level": name, "ours": ours, "uw": theirs, "agree": None})
+            row["agree"] = None
+            out.append(row)
             continue
         drift = abs(ours - theirs) / theirs if theirs else 1.0
-        out.append({"level": name, "ours": ours, "uw": theirs,
-                    "drift_pct": round(100 * drift, 2), "agree": drift <= tol})
+        row["drift_pct"] = round(100 * drift, 2)
+        # A known definitional difference is reported, not graded.
+        row["agree"] = None if note else drift <= tol
+        out.append(row)
     return out
+
+
+# Measured 2026-08-03 against the live chain, not assumed. Two hypotheses were
+# tested and both are dead: widening GEX_MAX_DTE from 1 to 365 moves our flip
+# only 738.85 -> 747.9 and never toward UW's 764.08, and flipping the dealer
+# sign convention destroys the call wall entirely, which the evidence forbids
+# because our call wall matches UW's EXACTLY at 760.00 in every configuration.
+#
+# What does explain it: computing the CUMULATIVE-across-strikes crossing on our
+# own profile yields 751.98 / 756.23 / 757.62 / 759.66 / 761.28 at windows of
+# 7 / 21 / 45 / 90 / 365 days — walking straight at UW's number. They use the
+# common cumulative shortcut over the whole chain; we re-price the chain at
+# candidate spots and bisect the true zero.
+#
+# Ours is a real zero: net gamma at our flip is 375,770 against a book of
+# 7.5 BILLION, i.e. 0.005%. At UW's flip our net gamma is +8,163,449,565 —
+# nowhere near a regime boundary. gex.py deliberately removed the cumulative
+# approximation because it read float-noise sign flips among worthless deep-OTM
+# strikes as a regime line hundreds of points below spot.
+#
+# So: keep ours, show theirs, and stop calling it a discrepancy.
+FLIP_NOTE = ("Different definitions, not a discrepancy. Ours re-prices the "
+             "chain at candidate spots and bisects the true zero; UW uses the "
+             "cumulative-across-strikes crossing over the full chain. Our flip "
+             "sits at 0.005% of net gamma; theirs sits at +$8.2B of it.")
+
+PUT_WALL_NOTE = ("Window-dependent. Ours is the largest negative-gamma strike "
+                 "inside GEX_MAX_DTE; UW scans the full chain, so theirs sits "
+                 "nearer spot. Ours moves with the window, theirs does not.")
 
 
 def _news_for(ticker: str, market: dict) -> dict:
