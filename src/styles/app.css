@@ -393,8 +393,22 @@ code {
   border-radius: 50%;
   background: var(--accent);
 }
-.mx__cell { padding: 2px 1.5px; }
-.mx__box { display: block; height: 15px; border-radius: 2px; }
+.mx__cell { padding: 1.5px; }
+.mx__box {
+  display: block;
+  min-width: 42px;
+  padding: 4px 6px;
+  border-radius: 2px;
+  /* Right-aligned tabular figures: the grid is read by comparing cells down a
+     column, and digits that shift horizontally as values update defeat that. */
+  font: 500 11px/1.15 var(--mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--text);
+}
+/* A cell with no open interest is stated, not left ambiguous with an empty
+   box that could equally mean "zero gamma" or "we have no data". */
+.mx__nil { color: var(--dim); }
 
 .mx__legend {
   display: flex;
@@ -404,6 +418,14 @@ code {
   color: var(--dim);
 }
 .mx__legend em { margin-left: auto; font-style: normal; }
+.mx__units th {
+  padding: 0 6px 3px;
+  font: 500 8.5px/1 var(--mono);
+  color: var(--dim);
+  text-align: right;
+  text-transform: none;
+  letter-spacing: 0;
+}
 .mx__key { width: 13px; height: 9px; border-radius: 2px; }
 .mx__key--neg  { background: var(--down); }
 .mx__key--zero { background: var(--line); }
