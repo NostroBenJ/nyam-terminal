@@ -254,10 +254,7 @@ def _uw_market(ticker: str) -> dict:
     """
     from data import unusual_whales as uw
 
-    market = _live_market(ticker)          # Yahoo baseline: OHLC + confirmer
-    market["sources"] = {"chain": "yahoo", "levels": "yahoo", "spot": "yahoo",
-                         "flow": None, "darkpool": None, "uw_levels": None}
-    market["uw_errors"] = {}
+    market = {"sources": {}, "uw_errors": {}}
 
     def _try(name, fn):
         try:
@@ -266,21 +263,24 @@ def _uw_market(ticker: str) -> dict:
             market["uw_errors"][name] = str(e)
             return None
 
-    # SPOT FIRST, and it is not a detail. Gamma is a function of spot, so a
-    # real-time chain priced against Yahoo's ~15-minute-delayed last price is
-    # not "mostly live" — it is a live chain evaluated at the wrong price, and
-    # every strike-relative output (flip, walls, which side of them price sits
-    # on, the whole bias) inherits that error while the UI reports the chain as
-    # live. UW's stock-state carries a server-side `tape_time`, so the age of
-    # this number is a measured fact rather than an assumption about the feed.
-    st = _try("spot", lambda: uw.stock_state(ticker))
-    if st:
-        px = uw._f(st, "close")
-        if px > 0:
-            market["primary"]["spot"] = round(px, 2)
-            market["sources"]["spot"] = "unusual_whales"
-            market["tape_time"] = st.get("tape_time")
-            market["market_time"] = st.get("market_time")
+    # NO YAHOO BASELINE. This used to start from _live_market() and overwrite
+    # the pieces UW covered, which left spot real-time while the overnight
+    # range it is compared against was ~15 minutes behind. That combination is
+    # not "mostly live", it is internally impossible: spot could print above an
+    # overnight high that did not yet know the print happened, and every
+    # level-relative read downstream inherited the contradiction.
+    #
+    # One provider, one clock. Anything UW cannot answer is reported as missing
+    # rather than quietly backfilled from a feed on a different clock.
+    market["primary"] = _uw_ticker(uw, ticker, market, is_primary=True)
+    market["secondary"] = _uw_ticker(uw, config.confirmer_for(ticker), market)
+    # NOT fetched per refresh. `_news_for` in pipeline.py reads the RSS rail
+    # live and only falls back to market["news"] in mock mode, so populating
+    # this here would spend a request every cycle on data nothing renders.
+    # `_uw_news` and `uw.headlines()` stay ready for wiring into the rail —
+    # UW carries Truth Social and aggregator headlines the RSS feeds do not.
+    market["news"] = []
+    market["sources"]["news"] = "rss (see news_feed.py)"
 
     contracts = _try("chain", lambda: uw.option_contracts(
         ticker, exclude_zero_oi_chains=True))
@@ -305,7 +305,123 @@ def _uw_market(ticker: str) -> dict:
         market["darkpool"] = uw.summarize_darkpool(dp)
         market["sources"]["darkpool"] = "unusual_whales"
 
+    market["oi_report"] = _uw_oi_report(ticker, market)
     return market
+
+
+def _uw_ticker(uw, symbol: str, market: dict, is_primary: bool = False) -> dict:
+    """
+    One ticker's session shape, entirely from UW.
+
+    Same contract `_live_ticker` produced, so everything downstream — SMT, the
+    level map, the bias engine — is unchanged. The difference is that spot,
+    the prior session and the overnight range now share one clock.
+
+    A failure here is recorded and the field left absent rather than filled
+    from Yahoo. Backfilling from a second feed is what created the impossible
+    state this function exists to remove, and a missing number the UI can show
+    as missing beats a plausible one from the wrong clock.
+    """
+    key = symbol.upper()
+    out = {"ticker": key}
+
+    st = None
+    try:
+        st = uw.stock_state(key)
+    except Exception as e:                            # noqa: BLE001
+        market["uw_errors"][f"{key}:spot"] = str(e)
+    if st:
+        px = uw._f(st, "close")
+        if px > 0:
+            out["spot"] = round(px, 2)
+            market["sources"]["spot"] = "unusual_whales"
+        # Server-side stamp: the age of this number is measured, not assumed.
+        # Only the traded instrument's stamp goes on the board; the confirmer
+        # has its own and showing whichever arrived last would be meaningless.
+        if is_primary:
+            market["tape_time"] = st.get("tape_time")
+            market["market_time"] = st.get("market_time")
+
+    try:
+        prior = uw.prior_session(key)
+        out["prior_high"] = round(prior["high"], 2)
+        out["prior_low"] = round(prior["low"], 2)
+        out["prior_close"] = round(prior["close"], 2)
+        market["sources"]["prior_session"] = "unusual_whales"
+    except Exception as e:                            # noqa: BLE001
+        market["uw_errors"][f"{key}:prior_session"] = str(e)
+        return out                                    # overnight needs prior
+
+    try:
+        hi, lo, real = uw.overnight_range(key, prior, config.TZ)
+        out["on_high"] = round(hi, 2)
+        out["on_low"] = round(lo, 2)
+        # False => no overnight session yet; the prior range is standing in and
+        # SMT must not read it as a real divergence.
+        out["on_is_real"] = real
+        market["sources"]["overnight"] = "unusual_whales"
+    except Exception as e:                            # noqa: BLE001
+        market["uw_errors"][f"{key}:overnight"] = str(e)
+
+    return out
+
+
+def _uw_news(uw, ticker: str) -> list:
+    """
+    UW headlines, shaped like the news items the UI already renders.
+
+    Kept separate from the RSS rail in news_feed.py, which stays as it is: that
+    covers Fed/Treasury/macro sources UW does not carry, and this covers the
+    tape. Two different things that both happen to be called news.
+    """
+    rows = uw.headlines(limit=40, ticker=ticker)
+    items = []
+    for r in rows:
+        title = (r.get("headline") or "").strip()
+        if not title:
+            continue
+        items.append({
+            "title": title,
+            "source": r.get("source") or "Unusual Whales",
+            "published": r.get("created_at"),
+            "sentiment": r.get("sentiment"),
+            "major": bool(r.get("is_major")),
+            "tickers": r.get("tickers") or [],
+        })
+    return items
+
+
+def _uw_oi_report(ticker: str, market: dict) -> dict:
+    """
+    Snapshot the chain for history, but let UW's own OI change stand.
+
+    The store still records today's chain — that dataset is the whole reason
+    the recorder exists and an option chain cannot be re-fetched for a past
+    date. What it does NOT do any more is overwrite `oi_change`. On the Yahoo
+    path that field was computed by diffing our own snapshots because there was
+    no alternative; UW carries the exchange's `prev_oi`, which is the real
+    number rather than our reconstruction of it. Applying the local diff on top
+    would replace a measurement with an estimate.
+    """
+    from data import oi_store
+
+    expiries = (market.get("primary") or {}).get("expiries")
+    if not expiries:
+        return {"available": False, "note": "no chain loaded"}
+    try:
+        oi_store.snapshot(ticker, expiries)
+    except Exception as e:                            # noqa: BLE001
+        return {"available": False,
+                "note": f"OI snapshot failed ({type(e).__name__}: {e})"}
+    changed = sum(1 for e in expiries
+                  for o in e["calls"] + e["puts"] if o.get("oi_change"))
+    return {
+        "available": changed > 0,
+        "source": "unusual_whales",
+        "legs_with_change": changed,
+        "note": ("day-over-day OI from UW prev_oi" if changed
+                 else "UW returned no prev_oi; oi_change is 0"),
+    }
 
 
 # ----------------------------------------------------------------------------

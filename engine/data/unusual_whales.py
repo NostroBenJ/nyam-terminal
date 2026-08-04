@@ -367,6 +367,122 @@ def _parse_occ(symbol: str):
         return 0.0, "", ""
 
 
+# ---------------------------------------------------------------------------
+# session shape  --  what Yahoo used to supply
+# ---------------------------------------------------------------------------
+# UW segments every candle by session: market_time is "pr" (pre), "r" (regular)
+# or "po" (post). That is strictly better than inferring the boundary from a
+# timestamp the way the Yahoo path had to, because the boundary is the
+# provider's own rather than our guess about exchange hours on a half day.
+MT_PRE, MT_REGULAR, MT_POST = "pr", "r", "po"
+
+
+def prior_session(ticker: str, today: dt.date = None) -> dict:
+    """
+    The last COMPLETED regular session: {date, high, low, close}.
+
+    "Completed" is the whole difficulty. Indexing a fixed offset into the daily
+    bars silently shifts the reference day by one during pre-market — exactly
+    when this tool is meant to be used — because whether today already has a
+    bar depends on what time you ask. So the session is selected by date
+    comparison, never by position.
+
+    Only `market_time == "r"` rows are considered. The pre and post rows for a
+    date carry their own high/low, and mixing them in would report an overnight
+    spike as part of the regular range.
+    """
+    today = today or dt.date.today()
+    rows = ohlc(ticker, candle_size="1d", limit=30)
+    regular = []
+    for r in rows:
+        if r.get("market_time") != MT_REGULAR:
+            continue
+        try:
+            d = dt.date.fromisoformat(str(r.get("date"))[:10])
+        except (TypeError, ValueError):
+            continue
+        if d < today:                       # strictly before today = completed
+            regular.append((d, r))
+    if not regular:
+        raise UWError(f"no completed regular session found for {ticker}")
+    d, r = max(regular, key=lambda x: x[0])
+    return {"date": d, "high": _f(r, "high"), "low": _f(r, "low"),
+            "close": _f(r, "close")}
+
+
+def overnight_range(ticker: str, prior: dict, tz, now_et: dt.datetime = None) -> tuple:
+    """
+    True overnight (Globex) range: prior regular close through now.
+
+    Returns (high, low, is_real), matching what SMT consumes.
+
+    The window is the point. A full prior session is NOT an overnight; feeding
+    that into SMT compares yesterday's day range against yesterday's day range
+    and manufactures agreement. The overnight that matters for the next open
+    starts at the prior close and runs to this moment, so it spans post-market,
+    the globex session and this morning's pre-market, plus today's regular
+    session so far once it opens.
+
+    `is_real` is False when no overnight session exists yet (weekends, or
+    before the first post-close print), in which case the prior session's range
+    stands in. Never widen that fallback: reporting a multi-day range as
+    "overnight" invents a breakout that never happened and hands SMT a fake
+    divergence.
+
+    Zero-volume candles are dropped. The Yahoo path had to do this because its
+    extended-hours bars carried phantom prints with nonsense lows; whether UW
+    does the same is unverified, so the guard stays. It costs nothing and the
+    failure it prevents is a 5% error in the overnight low.
+    """
+    fallback = (prior["high"], prior["low"], False)
+    try:
+        bars = ohlc(ticker, candle_size="5m", limit=500)
+    except UWError:
+        return fallback
+    if not bars:
+        return fallback
+
+    anchor = None                 # end of the prior regular session, in ET
+    parsed = []
+    for b in bars:
+        raw = b.get("start_time") or b.get("end_time")
+        if not raw:
+            continue
+        try:
+            t = dt.datetime.fromisoformat(str(raw).replace("Z", "+00:00")).astimezone(tz)
+        except ValueError:
+            continue
+        if _i(b, "volume") <= 0:                      # phantom print
+            continue
+        parsed.append((t, b))
+        # The prior session's close is the newest regular bar dated on the
+        # prior session's date. Anchoring on "the newest regular bar" alone
+        # would anchor to TODAY once the open happens, collapsing the window.
+        if b.get("market_time") == MT_REGULAR and t.date() == prior["date"]:
+            if anchor is None or t > anchor:
+                anchor = t
+    if anchor is None or not parsed:
+        return fallback
+
+    on = [b for t, b in parsed if t > anchor]
+    if not on:
+        return fallback
+    highs = [_f(b, "high") for b in on]
+    lows = [_f(b, "low") for b in on if _f(b, "low") > 0]
+    if not highs or not lows:
+        return fallback
+    return max(highs), min(lows), True
+
+
+def headlines(limit: int = 40, ticker: str = None) -> list:
+    """GET /api/news/headlines. Fields: headline, source, created_at,
+    sentiment, is_major, tickers, tags."""
+    q = {"limit": limit}
+    if ticker:
+        q["ticker"] = ticker.upper()
+    return _rows(_get("/api/news/headlines", q))
+
+
 def levels_to_floats(levels: dict) -> dict:
     """UW's gex-levels come back as decimal strings or null."""
     out = {}
