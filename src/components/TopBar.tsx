@@ -75,6 +75,27 @@ export function TopBar({
         value={g.gamma_flip === null ? "none in range" : price(g.gamma_flip)}
         cls={g.gamma_flip === null ? "muted" : undefined}
       />
+      {/* The magnet is the least stable level on the board, so it shows its
+          own margin: a thin lead means the runner-up is nearly as good a
+          candidate and the pick will flip on small moves. */}
+      <Stat
+        label="magnet"
+        value={g.control_node === null ? "none" : price(g.control_node, 0)}
+        sub={
+          g.control_node_margin_pct !== null &&
+          g.control_node_margin_pct !== undefined &&
+          g.control_node_margin_pct < 15
+            ? `vs ${price(g.control_node_runner_up ?? 0, 0)}`
+            : undefined
+        }
+        cls={
+          g.control_node_margin_pct !== null &&
+          g.control_node_margin_pct !== undefined &&
+          g.control_node_margin_pct < 15
+            ? "muted"
+            : undefined
+        }
+      />
       <Stat label="atm iv" value={`${(g.atm_iv * 100).toFixed(1)}`} />
       <Stat
         label="1σ"

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, type Sessions } from "../lib/api";
+import { clock12, hhmm12 } from "../lib/format";
 
 /**
  * Where you are in the trading day — ticking every second, never delayed.
@@ -25,13 +26,10 @@ const secOfDay = (hhmmss: string): number => {
   return h * 3600 + m * 60 + s;
 };
 
-const fmt = (sec: number): string => {
-  const t = ((sec % 86400) + 86400) % 86400;
-  const h = Math.floor(t / 3600);
-  const m = Math.floor((t % 3600) / 60);
-  const s = Math.floor(t % 60);
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-};
+// Display is 12-hour; the ARITHMETIC above stays in seconds-of-day, which is
+// the only sane way to compare against session boundaries and to wrap past
+// midnight. Formatting is the last step and touches nothing else.
+const fmt = (sec: number): string => clock12(sec);
 
 /** Inclusive-start, exclusive-end, wrapping past midnight when start > end. */
 const inWindow = (nowSec: number, start: string, end: string): boolean => {
@@ -160,7 +158,7 @@ export function SessionClock({ compact }: { compact?: boolean }) {
       )}
       {s.early_close && (
         <p className="clock__early">
-          Early close {s.early_close} ET — {s.early_close_name}
+          Early close {hhmm12(s.early_close)} ET — {s.early_close_name}
         </p>
       )}
 
@@ -169,11 +167,11 @@ export function SessionClock({ compact }: { compact?: boolean }) {
           <div
             key={x.id}
             className={`sess${x.active ? " sess--on" : ""} sess--${x.kind}`}
-            title={`${x.label} ${x.start}–${x.end} ET`}
+            title={`${x.label} ${hhmm12(x.start)} – ${hhmm12(x.end)} ET`}
           >
             <span className="sess__label">{x.label}</span>
             <span className="sess__hours num">
-              {x.start}–{x.end}
+              {hhmm12(x.start)}–{hhmm12(x.end)}
             </span>
           </div>
         ))}
@@ -186,7 +184,7 @@ export function SessionClock({ compact }: { compact?: boolean }) {
               <div className="win__head">
                 <span className="win__label">{w.label}</span>
                 <span className="win__hours num">
-                  {w.start}–{w.end}
+                  {hhmm12(w.start)}–{hhmm12(w.end)}
                 </span>
               </div>
               <p className="win__note">{w.note}</p>
@@ -197,7 +195,7 @@ export function SessionClock({ compact }: { compact?: boolean }) {
 
       <div className={`mywin${live.myWindow.active ? " mywin--on" : ""}`}>
         <span className="mywin__label">
-          Your window {live.myWindow.start}–{live.myWindow.end}
+          Your window {hhmm12(live.myWindow.start)}–{hhmm12(live.myWindow.end)}
         </span>
         <span className="mywin__note">{live.myWindow.note}</span>
       </div>

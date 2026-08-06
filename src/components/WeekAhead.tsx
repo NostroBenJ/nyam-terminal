@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, type Calendar, type CalEvent } from "../lib/api";
+import { hhmm12 } from "../lib/format";
 import { Empty } from "./Panel";
 
 /**
@@ -91,7 +92,7 @@ export function WeekAhead() {
             {new Date(`${cal.headline.date}T12:00:00`).toLocaleDateString(undefined, {
               weekday: "short",
             })}{" "}
-            {cal.headline.time}
+            {hhmm12(cal.headline.time)}
           </span>
         </div>
       )}
@@ -114,7 +115,9 @@ export function WeekAhead() {
               <ul className="wday__list">
                 {d.events.map((e, i) => (
                   <li key={`${e.title}-${i}`} className={`wev wev--${impactClass(e)}`}>
-                    <span className="wev__time num">{e.time || "—"}</span>
+                    <span className="wev__time num">
+                      {e.time ? hhmm12(e.time) : "—"}
+                    </span>
                     <span className="wev__title">
                       {e.kind === "earnings" && <span className="wev__tag">ER</span>}
                       {e.title}

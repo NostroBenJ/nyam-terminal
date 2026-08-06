@@ -26,9 +26,11 @@ WHAT UW GIVES YOU THAT YAHOO CANNOT
 A NOTE ON TYPES: UW returns numbers as JSON *strings* ('9356683.4241', '150').
 Every read goes through _f() / _i(). Do not index the raw dicts directly.
 """
+import concurrent.futures as cf
 import datetime as dt
 import json
 import os
+import time as _time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -161,25 +163,38 @@ def _get(path: str, params: dict = None, key: str = None) -> dict:
         # to be a browser.
         "User-Agent": USER_AGENT,
     })
-    _bump()
-    try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
-            return json.loads(r.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        body = e.read().decode("utf-8", "replace")[:300]
-        # A 403 has two very different causes and guessing wrong sends you
-        # hunting the wrong problem — the first version of this line blamed the
-        # tier for what was actually a Cloudflare block, which reads as "you
-        # need to pay more" when the real fix is a header. Cloudflare's own
-        # error codes are in the body, so read them instead of assuming.
-        hint = ""
-        if e.code == 403:
-            hint = (" (Cloudflare edge block, not your tier — check User-Agent)"
-                    if "error_code\":1010" in body.replace(" ", "")
-                    else " (tier may not include this endpoint)")
-        raise UWError(f"HTTP {e.code} on {path}{hint}: {body}", status=e.code) from e
-    except urllib.error.URLError as e:
-        raise UWError(f"network error on {path}: {e.reason}") from e
+    for attempt in range(RETRY_ATTEMPTS):
+        _bump()
+        try:
+            with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+                return json.loads(r.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            body = e.read().decode("utf-8", "replace")[:300]
+            # Concurrency limit, not a rate limit: the plan allows 3 requests
+            # in flight and the slot frees the moment one finishes. Retrying
+            # briefly is correct; failing the whole chain because two callers
+            # overlapped for 300ms is not.
+            if e.code in RETRY_STATUSES and attempt < RETRY_ATTEMPTS - 1:
+                _time.sleep(RETRY_BASE_SLEEP * (attempt + 1))
+                continue
+            # A 403 has two very different causes and guessing wrong sends you
+            # hunting the wrong problem — the first version of this line blamed
+            # the tier for what was actually a Cloudflare block, which reads as
+            # "you need to pay more" when the real fix is a header. Cloudflare's
+            # own error codes are in the body, so read them instead of assuming.
+            hint = ""
+            if e.code == 403:
+                hint = (" (Cloudflare edge block, not your tier — check User-Agent)"
+                        if "error_code\":1010" in body.replace(" ", "")
+                        else " (tier may not include this endpoint)")
+            elif e.code == 429:
+                hint = (f" (plan allows {PAGE_WORKERS} concurrent requests; "
+                        f"retried {RETRY_ATTEMPTS}x and still busy)")
+            raise UWError(f"HTTP {e.code} on {path}{hint}: {body}",
+                          status=e.code) from e
+        except urllib.error.URLError as e:
+            raise UWError(f"network error on {path}: {e.reason}") from e
+    raise UWError(f"exhausted retries on {path}")
 
 
 def _rows(body: dict) -> list:
@@ -195,6 +210,25 @@ def _rows(body: dict) -> list:
 # ---------------------------------------------------------------------------
 PAGE_SIZE = 500          # UW's hard cap; larger `limit` values are ignored
 MAX_PAGES = 60           # 30k contracts — far beyond any single underlying
+# Pages fetched concurrently. THREE IS NOT A GUESS — it is the plan's hard
+# ceiling, discovered by exceeding it:
+#
+#   HTTP 429: "You have exceeded 3 concurrent requests, the maximum allowed
+#              for your current plan."
+#
+# The daily budget (30,000) and the concurrency limit are separate constraints
+# and only the first is documented in a header. Raising this without raising
+# the plan turns a fast chain walk into a failed one.
+PAGE_WORKERS = 3
+
+# 429 is retryable and is NOT only about this walk: the limit is per key, so a
+# scheduled refresh overlapping the recorder can trip it with no parallelism
+# involved at all. Backoff is short because the limiter is concurrency-based
+# rather than rate-based — the slot frees as soon as an in-flight request
+# finishes, so waiting seconds would be waiting for nothing.
+RETRY_STATUSES = (429,)
+RETRY_ATTEMPTS = 4
+RETRY_BASE_SLEEP = 0.35
 
 
 def option_contracts(ticker: str, max_pages: int = MAX_PAGES, **q) -> list:
@@ -220,14 +254,41 @@ def option_contracts(ticker: str, max_pages: int = MAX_PAGES, **q) -> list:
     `max_pages` is a runaway guard, and hitting it is a real anomaly worth
     surfacing rather than absorbing.
     """
-    out, seen = [], set()
-    for page in range(max_pages):
+    def fetch(page: int) -> list:
         params = dict(q)
         params.setdefault("limit", PAGE_SIZE)
         params["page"] = page
-        rows = _rows(_get(f"/api/stock/{ticker.upper()}/option-contracts", params))
+        return _rows(_get(f"/api/stock/{ticker.upper()}/option-contracts", params))
+
+    pages: dict[int, list] = {}
+    next_page = 0
+    done = False
+    # Fetched in batches rather than one page at a time: the walk is ~28 serial
+    # round trips and each is mostly latency, so this is 3.6s of waiting that
+    # overlaps to well under one. The END CONDITION IS UNCHANGED — an empty
+    # page, evaluated in page order — because a short page does not mean the
+    # end and treating it as one truncated the chain by 27% (see above).
+    #
+    # Concurrency does not get to relax that. A batch is fetched, then walked
+    # IN ORDER, and the first empty page stops everything; pages fetched
+    # speculatively beyond it are discarded rather than concatenated, so the
+    # result is byte-identical to the serial walk.
+    while not done and next_page < max_pages:
+        batch = [p for p in range(next_page, min(next_page + PAGE_WORKERS, max_pages))]
+        with cf.ThreadPoolExecutor(max_workers=len(batch)) as pool:
+            for page, rows in zip(batch, pool.map(fetch, batch)):
+                pages[page] = rows
+        for page in batch:
+            if not pages.get(page):
+                done = True
+                break
+        next_page = batch[-1] + 1
+
+    out, seen = [], set()
+    for page in sorted(pages):
+        rows = pages[page]
         if not rows:
-            return out
+            break                       # end of data, in page order
         for c in rows:
             # UW pages by offset; a chain changing underneath a multi-page walk
             # can hand back a contract twice, which would double-count its OI.
@@ -237,10 +298,13 @@ def option_contracts(ticker: str, max_pages: int = MAX_PAGES, **q) -> list:
             if sym:
                 seen.add(sym)
             out.append(c)
-    raise UWError(
-        f"option-contracts still full after {max_pages} pages "
-        f"({len(out)} contracts) — refusing to return a possibly truncated chain"
-    )
+
+    if not done:
+        raise UWError(
+            f"option-contracts still full after {max_pages} pages "
+            f"({len(out)} contracts) — refusing to return a possibly truncated chain"
+        )
+    return out
 
 
 def greek_exposure_by_strike(ticker: str, **q) -> list:

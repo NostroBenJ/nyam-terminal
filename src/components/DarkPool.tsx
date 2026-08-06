@@ -128,9 +128,9 @@ function timeOf(at: string | null | undefined): string {
   const t = Date.parse(at);
   if (!Number.isFinite(t)) return "—";
   return new Date(t).toLocaleTimeString("en-US", {
-    hour: "2-digit",
+    hour: "numeric",
     minute: "2-digit",
     second: "2-digit",
-    hour12: false,
+    hour12: true,
   });
 }

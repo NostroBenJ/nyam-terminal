@@ -116,6 +116,27 @@ def compute_gex(chain: dict, spot: float, r: float) -> dict:
     control = max(profile, key=lambda p: abs(p["gex"])) if profile else None
     control_node = control["strike"] if control else None
 
+    # HOW CONTESTED THAT PICK IS, which matters more than it looks. The magnet
+    # is an argmax over strikes that are frequently near-tied, so it is the
+    # least stable of the four levels by construction. Measured live: the
+    # leader beat the runner-up by 5.4%, and a 0.1% move in spot flipped the
+    # answer from 775 to 762 — thirteen points — with the chain unchanged.
+    #
+    # That is also the whole explanation for "disagreeing" with a vendor here.
+    # Two correct implementations sampling seconds apart land on different
+    # strikes, and neither is wrong. Rendering it with the same confidence as
+    # the call wall (which matches UW exactly and does not move) claims a
+    # precision the number does not have, so the margin travels with it.
+    runner_up, margin_pct = None, None
+    if control and len(profile) > 1:
+        rest = [p for p in profile if p["strike"] != control_node]
+        if rest:
+            second = max(rest, key=lambda p: abs(p["gex"]))
+            lead = abs(control["gex"])
+            runner_up = second["strike"]
+            margin_pct = (round((lead - abs(second["gex"])) / lead * 100, 1)
+                          if lead else 0.0)
+
     # --- ATM implied vol (nearest strike to spot) for expected-move math ----
     atm_iv = _atm_iv(chain, spot)
 
@@ -132,6 +153,10 @@ def compute_gex(chain: dict, spot: float, r: float) -> dict:
         "regime": regime,
         "gamma_flip": flip,
         "control_node": control_node,
+        # Runner-up strike and how far ahead the leader is, as a percentage of
+        # the leader's own magnitude. Below ~15% the pick is a coin flip.
+        "control_node_runner_up": runner_up,
+        "control_node_margin_pct": margin_pct,
         "atm_iv": round(atm_iv, 4),
         "call_wall": call_wall["strike"] if call_wall else None,
         "put_wall": put_wall["strike"] if put_wall else None,

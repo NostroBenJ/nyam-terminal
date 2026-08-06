@@ -41,7 +41,8 @@ def _cross_check(gex: dict, uw_levels: dict, tol: float = 0.004) -> list | None:
     pairs = [("Call Wall", gex.get("call_wall"), uw_levels.get("call_wall"), None),
              ("Put Wall", gex.get("put_wall"), uw_levels.get("put_wall"), PUT_WALL_NOTE),
              ("Gamma Flip", gex.get("gamma_flip"), uw_levels.get("gamma_flip"), FLIP_NOTE),
-             ("Magnet", gex.get("control_node"), uw_levels.get("gamma_magnet"), None)]
+             ("Magnet", gex.get("control_node"), uw_levels.get("gamma_magnet"),
+              MAGNET_NOTE)]
     out = []
     for name, ours, theirs, note in pairs:
         row = {"level": name, "ours": ours, "uw": theirs, "note": note}
@@ -84,6 +85,19 @@ FLIP_NOTE = ("Different definitions, not a discrepancy. Ours re-prices the "
 PUT_WALL_NOTE = ("Window-dependent. Ours is the largest negative-gamma strike "
                  "inside GEX_MAX_DTE; UW scans the full chain, so theirs sits "
                  "nearer spot. Ours moves with the window, theirs does not.")
+
+# Measured 2026-08-04: our magnet and UW's agreed EXACTLY at 775, having
+# differed by 16 points an hour earlier. Neither was wrong. The magnet is an
+# argmax over near-tied strikes — the leader beat the runner-up by 5.4%, and a
+# 0.1% move in spot flipped the answer from 775 to 762 with the chain
+# unchanged. Two correct implementations sampling seconds apart land on
+# different strikes. Grading that as drift would flag noise as breakage, so it
+# is reported with its margin instead.
+MAGNET_NOTE = ("An argmax over near-tied strikes, so it is the least stable "
+               "level here: a 0.1% move in spot has been observed flipping it "
+               "13 points with the chain unchanged. A gap versus UW usually "
+               "means the two were sampled moments apart, not that either is "
+               "wrong. Read the margin beside it.")
 
 
 def _news_for(ticker: str, market: dict) -> dict:

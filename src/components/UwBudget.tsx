@@ -54,7 +54,7 @@ export function UwBudget({ budget }: { budget: Budget | null | undefined }) {
 
       <div className="budget__row">
         <span className="track__label">{int(budget.remaining)} left today</span>
-        <span className="track__base">resets 00:00 · {budget.date}</span>
+        <span className="track__base">resets midnight · {budget.date}</span>
       </div>
 
       <p className="disclaimer">

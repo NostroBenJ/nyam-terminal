@@ -42,6 +42,46 @@ export function ageSeconds(generatedAt: string): number | null {
   return Number.isFinite(age) ? age : null;
 }
 
+/* ------------------------------------------------------------------ time -- */
+
+/**
+ * Seconds-of-day to a 12-hour clock: 61659 -> "5:07:39 PM".
+ *
+ * The hour is NOT zero-padded — "05:07 PM" is not how anyone writes it — which
+ * means the string is one character narrower before 10am and after 9pm. Every
+ * caller pairs this with tabular figures and a min-width so the layout does not
+ * twitch on the hour; the digits themselves are fixed-width, so the ticking
+ * seconds stay still, which is the part that would actually be distracting.
+ */
+export function clock12(sec: number, withSeconds = true): string {
+  const t = ((Math.floor(sec) % 86400) + 86400) % 86400;
+  const h24 = Math.floor(t / 3600);
+  const m = Math.floor((t % 3600) / 60);
+  const s = Math.floor(t % 60);
+  const suffix = h24 < 12 ? "AM" : "PM";
+  const h = h24 % 12 === 0 ? 12 : h24 % 12;   // 0 and 12 both display as 12
+  const body = withSeconds
+    ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
+    : `${h}:${String(m).padStart(2, "0")}`;
+  return `${body} ${suffix}`;
+}
+
+/** "09:30" -> "9:30 AM". For the fixed session-window labels. */
+export function hhmm12(hhmm: string | null | undefined): string {
+  if (!hhmm) return "—";
+  const [h = 0, m = 0] = hhmm.split(":").map(Number);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return String(hhmm);
+  return clock12(h * 3600 + m * 60, false);
+}
+
+/** "09:30–16:00" or "09:30-16:00" -> "9:30 AM – 4:00 PM". */
+export function range12(range: string | null | undefined): string {
+  if (!range) return "—";
+  const parts = range.split(/[–-]/);
+  if (parts.length !== 2) return range;
+  return `${hhmm12(parts[0].trim())} – ${hhmm12(parts[1].trim())}`;
+}
+
 /**
  * Age of the MARKET DATA, from the provider's own server-side tape stamp.
  *

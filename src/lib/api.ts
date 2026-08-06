@@ -24,6 +24,11 @@ export interface Gex {
   /** null is a real answer: "no zero-gamma crossing within range". */
   gamma_flip: number | null;
   control_node: number | null;
+  /** Runner-up strike, and how far ahead the leader is as a % of its own
+   *  magnitude. Below ~15% the magnet is effectively a coin flip between the
+   *  two — it has been observed flipping 13 points on a 0.1% move in spot. */
+  control_node_runner_up?: number | null;
+  control_node_margin_pct?: number | null;
   atm_iv: number;
   call_wall: number | null;
   put_wall: number | null;
