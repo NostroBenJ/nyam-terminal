@@ -34,6 +34,10 @@ KNOWN_NULLABLE = {
         "direction to be right about, so there is no rate rather than 0%",
     "track.mixed_rules":
         "history graded under a single rule, so nothing to warn about",
+    "track.mixed_mixes":
+        "history made under a single signal mix, so nothing to warn about; "
+        "TrackRecord renders the breakdown only behind `track.mixed_mixes &&`",
+    "mixed_mixes": "same field, reached via /api/journal's stats block",
     "gex.gamma_flip":
         "no zero-gamma crossing inside the strike range",
     "gex.call_wall":

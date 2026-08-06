@@ -104,6 +104,12 @@ export interface TrackRecord {
   /** e.g. "open->12:00@0.175" — the rule each record was graded under. */
   rule: string;
   mixed_rules: string[] | null;
+  /** The signal set currently producing calls, e.g. "v2-flow". */
+  mix?: string;
+  /** Set when the graded history spans more than one signal mix — the rate is
+   *  then averaging two different systems and describes neither. */
+  mixed_mixes?: string[] | null;
+  by_mix?: Record<string, { n: number; wins: number }>;
 }
 
 /** Our level vs Unusual Whales' own. Surfaced, never auto-resolved. */

@@ -193,7 +193,16 @@ def build_snapshot(ticker: str = None, with_brief: bool = True) -> dict:
     )
 
     news = _news_for(p["ticker"], market)
-    bias = bias_engine.build_bias(gex, levels, smt, news, em=em, neg_zone=neg_zone)
+    # Flow reads what money DID today; everything else reads where it is
+    # positioned. Passed as one dict so a provider without a flow feed simply
+    # contributes no flow signals rather than the engine needing to know why.
+    flow_inputs = {
+        "net_flow": market.get("net_flow"),
+        "flow_alerts": market.get("flow_alerts"),
+        "darkpool": market.get("darkpool"),
+    }
+    bias = bias_engine.build_bias(gex, levels, smt, news, em=em,
+                                  neg_zone=neg_zone, flow=flow_inputs)
 
     # THE BRIEF DOES NOT BLOCK THE BOARD. Measured on a cold snapshot: the whole
     # build is 19.6s, of which the Claude call is 13.9s — the remaining 5.7s is

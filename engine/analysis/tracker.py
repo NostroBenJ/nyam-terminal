@@ -20,6 +20,7 @@ import random
 
 import config
 import store
+from analysis import bias_engine
 
 
 def predicted_dir(label: str) -> str:
@@ -61,6 +62,13 @@ def record_prediction(snap: dict) -> dict:
         "score": b["score"],
         "predicted_dir": predicted_dir(b["label"]),
         "spot": g["spot"],
+        # WHICH SIGNAL SET made this call. The hit rate answers "does this bias
+        # work"; change the signals feeding it and the number keeps counting,
+        # averaging calls from two different systems into one figure that
+        # describes neither. Recorded at call time for the same reason the
+        # grading rule is — so a rate spanning a change can be seen as such
+        # rather than silently blended.
+        "mix": b.get("mix", "v1"),
         "outcome": None,
         # WHY the call was made, captured at call time.
         #
@@ -208,6 +216,20 @@ def compute_stats(recs: dict, ticker: str = None) -> dict:
         # be read as if it were one measurement.
         "mixed_rules": sorted({r["outcome"].get("rule", "?") for r in graded}) if len(
             {r["outcome"].get("rule", "?") for r in graded}) > 1 else None,
+        # Same guard, for the signal set rather than the grading window. Calls
+        # made under different mixes are different experiments and a single
+        # rate over both measures neither.
+        "mix": bias_engine.MIX_VERSION,
+        "mixed_mixes": sorted({r.get("mix", "v1") for r in graded}) if len(
+            {r.get("mix", "v1") for r in graded}) > 1 else None,
+        "by_mix": {
+            m: {
+                "n": sum(1 for r in graded if r.get("mix", "v1") == m),
+                "wins": sum(1 for r in graded
+                            if r.get("mix", "v1") == m and r["outcome"]["correct"]),
+            }
+            for m in sorted({r.get("mix", "v1") for r in graded})
+        },
     }
 
 

@@ -98,8 +98,29 @@ export function TrackRecord({ track }: { track: Track }) {
         ))}
       </div>
 
+      {/* A rate spanning two signal mixes averages two different systems and
+          describes neither. Broken out rather than warned about in passing,
+          because the whole reason to version the mix is to keep the old
+          baseline comparable instead of resetting it. */}
+      {track.mixed_mixes && track.by_mix && (
+        <div className="track__warn">
+          <strong>Signal mix changed mid-history.</strong> The headline rate
+          above averages calls made by different systems. Split out:
+          <ul className="track__mixlist">
+            {Object.entries(track.by_mix).map(([m, v]) => (
+              <li key={m}>
+                <code>{m}</code> — {v.wins}/{v.n}
+                {v.n > 0 && ` (${Math.round((v.wins / v.n) * 100)}%)`}
+                {m === track.mix && " · current"}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <p className="track__rule">
         graded <code>{track.rule}</code>
+        {track.mix && <> · mix <code>{track.mix}</code></>}
         {track.pending > 0 && ` · ${track.pending} pending`}
         {track.mixed_rules && (
           <span className="track__mixed"> · mixed rules in history, rates not comparable</span>

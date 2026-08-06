@@ -30,6 +30,7 @@ import concurrent.futures as cf
 import datetime as dt
 import json
 import os
+import threading
 import time as _time
 import urllib.error
 import urllib.parse
@@ -166,8 +167,11 @@ def _get(path: str, params: dict = None, key: str = None) -> dict:
     for attempt in range(RETRY_ATTEMPTS):
         _bump()
         try:
-            with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
-                return json.loads(r.read().decode("utf-8"))
+            # Bounded here rather than at the call sites, so every path through
+            # this module respects the plan's concurrency ceiling.
+            with _slots:
+                with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+                    return json.loads(r.read().decode("utf-8"))
         except urllib.error.HTTPError as e:
             body = e.read().decode("utf-8", "replace")[:300]
             # Concurrency limit, not a rate limit: the plan allows 3 requests
@@ -229,6 +233,23 @@ PAGE_WORKERS = 3
 RETRY_STATUSES = (429,)
 RETRY_ATTEMPTS = 4
 RETRY_BASE_SLEEP = 0.35
+
+# THE LIMIT IS PER KEY, SO IT MUST BE ENFORCED PER PROCESS.
+#
+# Setting PAGE_WORKERS to the plan's ceiling of 3 spends the entire allowance
+# on the chain walk, which is fine right up until anything else calls UW at the
+# same time — a scheduled refresh overlapping the recorder, two tickers
+# refreshing together, or a verification suite running beside the engine. Then
+# the total exceeds 3 and something 429s. That was observed: a suite that
+# passes alone failed while the engine was live.
+#
+# A semaphore around every request caps the PROCESS at 3 in flight no matter
+# how many callers there are, so concurrency is bounded where the limit
+# actually applies rather than inside one function that happens to know about
+# it. Retries stay as the backstop for the genuinely unavoidable case: another
+# process using the same key.
+MAX_CONCURRENT = 3
+_slots = threading.Semaphore(MAX_CONCURRENT)
 
 
 def option_contracts(ticker: str, max_pages: int = MAX_PAGES, **q) -> list:
