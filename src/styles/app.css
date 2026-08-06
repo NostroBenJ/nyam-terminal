@@ -400,6 +400,19 @@ code {
   border-radius: 50%;
   background: var(--accent);
 }
+/* A named level (flip, walls, magnet) is pinned into the grid even when far
+   from spot — the regime line used to be cropped off the bottom. */
+.mx__row--level .mx__strike { color: var(--text); }
+.mx__lvl {
+  margin-left: 6px;
+  padding: 1px 4px;
+  border-radius: 2px;
+  background: var(--panel-2);
+  font: 500 8.5px/1.4 var(--mono);
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
 .mx__cell { padding: 1.5px; }
 .mx__box {
   display: block;

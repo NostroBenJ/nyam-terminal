@@ -48,10 +48,19 @@ export function GexMatrix({ grid }: { grid: Grid | null }) {
         </thead>
         <tbody>
           {grid.rows.map((r) => (
-            <tr key={r.strike} className={r.at_spot ? "mx__row--spot" : undefined}>
+            <tr
+              key={r.strike}
+              className={[
+                r.at_spot ? "mx__row--spot" : "",
+                r.level ? "mx__row--level" : "",
+              ].filter(Boolean).join(" ") || undefined}
+            >
               <td className="mx__strike num">
                 {price(r.strike, 0)}
                 {r.at_spot && <i className="mx__here" title="spot sits here" />}
+                {/* Naming the row saves cross-referencing the level map to find
+                    which line in a wall of numbers decides the regime. */}
+                {r.level && <span className="mx__lvl">{r.level}</span>}
               </td>
               {r.cells.map((c, i) => (
                 <td key={i} className="mx__cell" title={c === null ? "no open interest" : money(c)}>

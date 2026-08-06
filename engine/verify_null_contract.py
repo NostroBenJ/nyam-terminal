@@ -91,6 +91,11 @@ KNOWN_NULLABLE = {
     "early_close_name": "same as early_close",
     "minutes_until": "null when no next boundary applies; declared nullable",
     "until_label": "same as minutes_until",
+
+    # Caught by this suite on the run that introduced it, which is the point.
+    "matrix.rows[].level":
+        "null on rows that are not a named level; GexMatrix renders the badge "
+        "only behind `r.level &&`, and api.ts declares it `string | null`",
 }
 
 

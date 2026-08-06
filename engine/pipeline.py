@@ -200,7 +200,9 @@ def build_snapshot(ticker: str = None, with_brief: bool = True) -> dict:
                  "budget_capped": False}
 
     # --- the actionable layer ----------------------------------------------
-    grid = matrix.build(per_expiry, p["spot"])
+    # `gex` supplies the flip and walls so the grid always contains the rows
+    # that decide the regime, however far from spot they sit.
+    grid = matrix.build(per_expiry, p["spot"], levels=gex)
     trade_plan = plan.build(gex, em=em, neg_zone=neg_zone)
     trend = plan.trend_read(gex, smt, bias)
 

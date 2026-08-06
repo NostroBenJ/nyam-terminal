@@ -500,6 +500,8 @@ export interface GexMatrix {
     cells: Array<number | null>;
     total: number;
     at_spot: boolean;
+    /** "flip" | "put wall" | "call wall" | "magnet" when this row is one. */
+    level?: string | null;
   }>;
   /** Grid-wide magnitude for a single shared colour scale. */
   max_abs: number;
