@@ -28,6 +28,45 @@ import { loadUi, saveUi } from "../lib/persist";
  * be a genuinely dangerous thing to put in front of someone sizing a position.
  */
 
+/**
+ * How many bars to show by default, per interval.
+ *
+ * Roughly one session of context in each case: 5m and 1m land on about a
+ * trading day, 30m and 1h on about a week. The engine always serves 1000 bars
+ * so panning back stays instant — this only chooses the opening window.
+ */
+const VISIBLE_BARS: Record<string, number> = {
+  "1m": 240,   // ~4h
+  "5m": 130,   // ~11h — one full session including extended hours
+  "30m": 120,  // ~5 days
+  "1h": 120,   // ~2 weeks
+};
+
+/**
+ * A bar's timestamp as EXCHANGE time, which is the only clock this app uses.
+ *
+ * Everything else here — the session clock, session bands, dark pool prints —
+ * is ET, and the chart was the one surface still labelled UTC because that is
+ * the library's default for UNIX timestamps. Four hours of silent disagreement
+ * on the axis you use to line candles up against session boundaries.
+ */
+function etLabel(time: number, withDate: boolean): string {
+  const d = new Date(time * 1000);
+  const t = d.toLocaleTimeString("en-US", {
+    timeZone: "America/New_York",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+  if (!withDate) return t;
+  const day = d.toLocaleDateString("en-US", {
+    timeZone: "America/New_York",
+    month: "short",
+    day: "numeric",
+  });
+  return `${day} ${t}`;
+}
+
 /** Levels are rebuilt on change rather than diffed — there are at most five. */
 type LevelSpec = {
   key: string;
@@ -72,7 +111,25 @@ export function PriceChart({ gex, ticker }: { gex: Gex; ticker: string }) {
         horzLines: { color: t["--line"] },
       },
       rightPriceScale: { borderColor: t["--line"] },
-      timeScale: { borderColor: t["--line"], timeVisible: true, secondsVisible: false },
+      timeScale: {
+        borderColor: t["--line"],
+        timeVisible: true,
+        secondsVisible: false,
+        // EXCHANGE TIME, NOT UTC. Lightweight Charts renders UNIX timestamps in
+        // UTC unless told otherwise, so the axis read four hours ahead of the
+        // session clock, the dark pool print times and the session bands —
+        // every other time in this app is ET. A chart whose axis disagrees with
+        // the clock beside it is worse than one with no axis: it invites you to
+        // line up a candle against a session boundary that is not where it
+        // looks. Compared against TradingView on the same 5m SPY and the two
+        // now show the same window.
+        tickMarkFormatter: (time: number) => etLabel(time, false),
+      },
+      localization: {
+        // The crosshair readout uses the same clock, with the date, since that
+        // is where you check exactly which bar you are on.
+        timeFormatter: (time: number) => etLabel(time, true),
+      },
       crosshair: {
         vertLine: { color: t["--dim"], labelBackgroundColor: t["--panel-2"] },
         horzLine: { color: t["--dim"], labelBackgroundColor: t["--panel-2"] },
@@ -137,7 +194,20 @@ export function PriceChart({ gex, ticker }: { gex: Gex; ticker: string }) {
           close: b.close,
         })) as CandlestickData<Time>[];
         series.current.setData(data);
-        chart.current?.timeScale().fitContent();
+        // NOT fitContent(). The engine serves 1000 bars, which on the 5m is
+        // ~83 hours — three and a half sessions crushed into one panel, where
+        // individual candles are a pixel wide and nothing is readable. Show a
+        // recent window sized to the interval instead, scrolled to the latest
+        // bar, which is what every charting package does by default and what
+        // makes ours comparable to TradingView side by side.
+        const span = VISIBLE_BARS[interval] ?? 120;
+        const ts = chart.current?.timeScale();
+        if (ts && data.length) {
+          ts.setVisibleLogicalRange({
+            from: Math.max(0, data.length - span),
+            to: data.length + 2,          // a little air at the right edge
+          });
+        }
         setMeta({ source: res.source, note: res.note, n: data.length });
       })
       .catch((e) => {
