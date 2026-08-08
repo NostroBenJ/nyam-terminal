@@ -723,7 +723,48 @@ code {
 }
 
 /* Lightweight Charts needs a sized box; it fills this via autoSize. */
+.pchart__wrap { position: relative; flex: 1 1 auto; min-height: 240px; display: flex; }
 .pchart__canvas { flex: 1 1 auto; min-height: 240px; width: 100%; }
+
+/* Fit-levels / fit-price toggle. */
+.pchart__fit {
+  margin-left: 10px;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: transparent;
+  font: 500 10px/1 var(--mono);
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pchart__fit:hover { color: var(--text); }
+.pchart__fit--on { color: var(--accent); border-color: var(--accent); }
+
+/* A level that left the frame, pinned to the edge it left through. Deliberately
+   loud enough to notice at a glance: this is the "price is heading somewhere
+   you can't see" warning, and a subtle one would defeat the purpose. */
+.pchart__off {
+  position: absolute;
+  right: 76px;                 /* clear of the price scale */
+  z-index: 3;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 2px 7px;
+  border: 1px solid;
+  border-radius: 3px;
+  background: var(--panel);
+  font: 500 10px/1.4 var(--mono);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.pchart__off em { font-style: normal; opacity: 0.75; }
+.pchart__off--up { top: 6px; }
+.pchart__off--down { bottom: 6px; }
+/* Stack them if more than one level is off the same edge. */
+.pchart__off--up ~ .pchart__off--up { top: 30px; }
+.pchart__off--down ~ .pchart__off--down { bottom: 30px; }
 
 .pchart__err {
   margin: 6px 0 0;

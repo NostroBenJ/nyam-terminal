@@ -84,6 +84,29 @@ export function PriceChart({ gex, ticker }: { gex: Gex; ticker: string }) {
   /** Level prices the autoscale provider must keep in frame. */
   const levelPrices = useRef<number[]>([]);
 
+  /**
+   * Whether the price axis stretches to contain the gamma levels.
+   *
+   * "Fit levels" (the default) frames price RELATIVE TO the structure, which is
+   * the reason this chart exists rather than an embedded TradingView widget.
+   * The cost is that a distant flip stretches the axis and squashes the candles
+   * — measured against TradingView on the same 5m SPY, ours spanned 12 points
+   * of scale where theirs spanned 2, so the same price action read as flat.
+   *
+   * "Fit price" scales to the candles and pushes out-of-frame levels to the
+   * chart edge as markers. Nothing is ever hidden in either mode.
+   */
+  const [fitLevelsOn, setFitLevelsOn] = useState<boolean>(
+    () => loadUi().fitLevels !== false
+  );
+  // The autoscale callback lives on the series and must not be re-created on
+  // every toggle, so it reads a ref rather than closing over the state.
+  const fitLevels = useRef(fitLevelsOn);
+  /** Levels currently outside the visible price range, for the edge markers. */
+  const [offscreen, setOffscreen] = useState<
+    { title: string; price: number; color: string; above: boolean }[]
+  >([]);
+
   const [interval, setIntervalState] = useState<Interval>(
     () => (loadUi().interval as Interval) || "5m"
   );
@@ -154,6 +177,14 @@ export function PriceChart({ gex, ticker }: { gex: Gex; ticker: string }) {
       autoscaleInfoProvider: (orig: () => AutoscaleInfo | null) => {
         const base = orig();
         const lv = levelPrices.current;
+        // PRICE FIT: scale to the candles alone. The levels are NOT dropped —
+        // any that fall outside the frame are rendered as edge markers below,
+        // carrying their price and distance. Hiding a level because it is far
+        // away would be exactly backwards: a flip ten points below spot is the
+        // most important thing on the screen the moment price starts falling
+        // toward it. What compresses the candles is the axis being stretched to
+        // reach it, and that is separable from whether you can see it.
+        if (!fitLevels.current) return base;
         if (!lv.length) return base;
         // priceRange is null before the series has data — then the levels are
         // the only thing to frame, which is still better than an empty scale.
@@ -258,7 +289,32 @@ export function PriceChart({ gex, ticker }: { gex: Gex; ticker: string }) {
       .filter((p): p is number => p !== null && Number.isFinite(p));
     // Autoscale only re-runs on data change, so nudge it to pick up new levels.
     s.applyOptions({});
-  }, [gex, meta]);
+
+    // WHICH LEVELS FELL OFF THE FRAME. In fit-levels mode this is always empty
+    // by construction. In fit-price mode it is the whole safety net: a level
+    // that scrolled off does not stop existing, and price moving toward one you
+    // cannot see is the exact case that matters. Measured against the rendered
+    // scale rather than a guess about distance, so it is right at any zoom.
+    if (fitLevels.current) {
+      setOffscreen([]);
+      return;
+    }
+    const range = s.priceScale().getVisibleRange?.();
+    if (!range) {
+      setOffscreen([]);
+      return;
+    }
+    setOffscreen(
+      specs
+        .filter((x): x is LevelSpec & { price: number } =>
+          x.price !== null && Number.isFinite(x.price) && x.key !== "spot")
+        .filter((x) => x.price < range.from || x.price > range.to)
+        .map((x) => ({
+          title: x.title, price: x.price, color: x.color,
+          above: x.price > range.to,
+        }))
+    );
+  }, [gex, meta, fitLevelsOn]);
 
   const missing = [
     gex.gamma_flip === null && "gamma flip",
@@ -281,6 +337,28 @@ export function PriceChart({ gex, ticker }: { gex: Gex; ticker: string }) {
             </button>
           ))}
         </div>
+
+        {/* Fit levels vs fit price. Not a cosmetic preference: one frames price
+            relative to the gamma structure, the other shows the price action at
+            TradingView-like resolution. Both keep every level reachable. */}
+        <button
+          className={`pchart__fit${fitLevelsOn ? " pchart__fit--on" : ""}`}
+          onClick={() => {
+            const next = !fitLevelsOn;
+            setFitLevelsOn(next);
+            fitLevels.current = next;
+            saveUi({ ...loadUi(), fitLevels: next });
+            series.current?.applyOptions({});
+          }}
+          title={
+            fitLevelsOn
+              ? "Axis is stretched to keep every gamma level in frame. Click to scale to the candles instead — off-frame levels move to the chart edge."
+              : "Axis is scaled to the candles. Levels outside the frame are shown as edge markers. Click to fit every level in view."
+          }
+        >
+          {fitLevelsOn ? "fit levels" : "fit price"}
+        </button>
+
         <div className="pchart__legend">
           <Swatch color="var(--text)" solid label={`spot ${price(gex.spot)}`} />
           <Swatch color="var(--accent)" label={`flip ${price(gex.gamma_flip)}`} />
@@ -290,7 +368,30 @@ export function PriceChart({ gex, ticker }: { gex: Gex; ticker: string }) {
         </div>
       </div>
 
-      <div className="pchart__canvas" ref={box} />
+      <div className="pchart__wrap">
+        <div className="pchart__canvas" ref={box} />
+
+        {/* A level that scrolled off the frame has NOT stopped mattering — a
+            flip below the visible range is the thing you most need to know
+            about the moment price starts falling toward it. So it becomes a
+            marker pinned to the edge it left, with the distance to it, rather
+            than disappearing. This is why "fit price" is safe to offer. */}
+        {offscreen.map((o) => (
+          <span
+            key={o.title}
+            className={`pchart__off pchart__off--${o.above ? "up" : "down"}`}
+            style={{ borderColor: o.color, color: o.color }}
+            title={`${o.title} at ${price(o.price)} — outside the current frame`}
+          >
+            {o.above ? "▲" : "▼"} {o.title} {price(o.price)}
+            <em>
+              {gex.spot
+                ? ` ${(((o.price - gex.spot) / gex.spot) * 100).toFixed(2)}%`
+                : ""}
+            </em>
+          </span>
+        ))}
+      </div>
 
       {error && <p className="pchart__err">Bars unavailable — {error}</p>}
 

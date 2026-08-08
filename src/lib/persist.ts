@@ -14,6 +14,9 @@ export interface UiState {
   ticker: string;
   interval: string;
   newsSort: "relevance" | "latest";
+  /** Price axis stretches to contain the gamma levels. Default on — framing
+   *  price against the structure is why this chart exists. */
+  fitLevels: boolean;
 }
 
 const DEFAULTS: UiState = {
@@ -21,6 +24,7 @@ const DEFAULTS: UiState = {
   ticker: "SPY",
   interval: "5m",
   newsSort: "relevance",
+  fitLevels: true,
 };
 
 export function loadUi(): UiState {
