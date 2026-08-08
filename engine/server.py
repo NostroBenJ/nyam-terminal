@@ -574,7 +574,36 @@ def main():
                     help="skip the cron jobs (useful when running tests)")
     ap.add_argument("--no-warm", action="store_true",
                     help="skip the startup snapshot so the port opens immediately")
+    # CAPTURE AS A MODE OF THE FROZEN ENGINE, not a separate `python capture.py`.
+    #
+    # Task Scheduler ran `python capture.py` against the source repo and every
+    # run failed with 0x80070002 (FILE_NOT_FOUND): a bare `python` is not
+    # resolved the way an interactive shell resolves it, so nothing was ever
+    # captured. Worse, the working directory was the source tree, so even a
+    # successful run would have written to the repo's data_store while the
+    # installed app reads its own — the Journal would have shown an empty
+    # recorder and the days would still have been gone.
+    #
+    # Running it through this executable removes both faults at once: the path
+    # is the app's own binary, and STORE_DIR resolves next to it.
+    ap.add_argument("--capture", action="store_true",
+                    help="run the headless capture once and exit (no server)")
+    ap.add_argument("--tickers", default=None,
+                    help="with --capture: comma-separated; defaults to PRIMARY_TICKER")
+    ap.add_argument("--grade-only", action="store_true",
+                    help="with --capture: only grade yesterday's calls")
+    ap.add_argument("--force", action="store_true",
+                    help="with --capture: run on a non-trading day too")
+    ap.add_argument("--status", action="store_true",
+                    help="with --capture: print what has been captured and exit")
     args = ap.parse_args()
+
+    if args.capture:
+        import capture
+        if args.status:
+            raise SystemExit(capture.print_status())
+        raise SystemExit(capture.run_cli(
+            tickers=args.tickers, grade_only=args.grade_only, force=args.force))
 
     tracker.ensure_seeded()
     tracker.grade_pending(get_ohlc)            # grade any past, ungraded calls

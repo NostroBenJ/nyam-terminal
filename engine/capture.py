@@ -60,7 +60,13 @@ def _log(msg: str) -> None:
 # lands on disk or is gone. Each is captured independently so one 403 (a tier
 # that lacks an endpoint) never costs you the others.
 UW_CAPTURES = [
-    ("flow_alerts", lambda uw, t: uw.flow_alerts(t, limit=500)),
+    # PER-ENDPOINT LIMITS DIFFER and exceeding one is a hard 422, not a clamp.
+    # flow-alerts caps at 200: "Invalid limit 500 - limit must be smaller than
+    # 200". Asking for 500 failed every single capture, so the one endpoint
+    # whose data genuinely cannot be bought back later was the one being lost.
+    # Found only by running the recorder and reading its output; the per-
+    # endpoint isolation below meant it failed quietly beside six successes.
+    ("flow_alerts", lambda uw, t: uw.flow_alerts(t, limit=199)),
     ("darkpool", lambda uw, t: uw.darkpool(t, limit=500)),
     ("gex_levels", lambda uw, t: [uw.gex_levels(t)]),
     ("greek_exposure_strike", lambda uw, t: uw.greek_exposure_by_strike(t)),
@@ -302,25 +308,49 @@ def main():
     args = ap.parse_args()
 
     if args.status:
-        s = status()
-        print(f"capture dir: {s['dir']}")
-        print(f"{len(s['days'])} day(s), {s['total_bytes'] / 1024 / 1024:.1f} MB")
-        for d in s["days"]:
-            errs = " ERRORS" if (d["errors"] or d["ticker_errors"]) else ""
-            print(f"  {d['date']} {d['weekday'] or '':<9} "
-                  f"{','.join(d['tickers']) or '-':<12} {d['files']:>2} files "
-                  f"{d['bytes'] / 1024:>7.0f} KB{errs}")
-        if s["missing_trading_days"]:
-            print(f"  MISSING trading days: {', '.join(s['missing_trading_days'])}")
-        return
+        sys.exit(print_status())
 
-    tickers = ([t.strip().upper() for t in args.tickers.split(",")]
-               if args.tickers else [config.PRIMARY_TICKER])
-    m = run(tickers, grade_only=args.grade_only, force=args.force)
+    sys.exit(run_cli(tickers=args.tickers, grade_only=args.grade_only,
+                     force=args.force))
+
+
+def print_status() -> int:
+    """
+    What has been captured, on stdout. Shared by both entry points.
+
+    Prints the MISSING trading days last and unmissably, because that is the
+    only line here that cannot be fixed later: an option chain is not
+    retrievable for a past date on any feed, so a gap is permanent.
+    """
+    s = status()
+    print(f"capture dir: {s['dir']}")
+    print(f"{len(s['days'])} day(s), {s['total_bytes'] / 1024 / 1024:.1f} MB")
+    for d in s["days"]:
+        errs = " ERRORS" if (d["errors"] or d["ticker_errors"]) else ""
+        print(f"  {d['date']} {d['weekday'] or '':<9} "
+              f"{','.join(d['tickers']) or '-':<12} {d['files']:>2} files "
+              f"{d['bytes'] / 1024:>7.0f} KB{errs}")
+    if s["missing_trading_days"]:
+        print(f"  MISSING trading days: {', '.join(s['missing_trading_days'])}")
+        print("  These cannot be backfilled - no feed sells a past option chain.")
+    return 0
+
+
+def run_cli(tickers: str = None, grade_only: bool = False,
+            force: bool = False) -> int:
+    """
+    One capture run, returning an exit code. Shared by `python capture.py` and
+    by `nyam-engine.exe --capture`, so the scheduled job and the manual command
+    execute exactly the same path — a scheduler running a different code path
+    from the one you tested is how you find out in a month that it never worked.
+    """
+    names = ([t.strip().upper() for t in tickers.split(",")]
+             if tickers else [config.PRIMARY_TICKER])
+    m = run(names, grade_only=grade_only, force=force)
     # Non-zero only on a total failure — a single bad endpoint must not make
     # Task Scheduler report the whole job as failed and stop trusting it.
     fatal = any("fatal" in (v.get("errors") or {}) for v in m["tickers"].values())
-    sys.exit(1 if fatal else 0)
+    return 1 if fatal else 0
 
 
 if __name__ == "__main__":

@@ -22,6 +22,11 @@ hidden = [
     # key sitting right there. Anything imported inside a function goes here.
     "data.uw_socket",
     "data.unusual_whales",
+    # Imported inside main() only when --capture is passed, so static analysis
+    # never sees it. Without this the scheduled recorder fails in the packaged
+    # build and works in dev — the worst possible split, because the thing that
+    # runs unattended is the one that breaks.
+    "capture",
     "uvicorn.logging",
     "uvicorn.loops",
     "uvicorn.loops.auto",
