@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { CrashProbe, crashRequested } from "./components/CrashProbe";
+import { GaugeProbe, gaugeProbeRequested } from "./components/GaugeProbe";
 import { ENGINE } from "./lib/api";
 
 /**
@@ -42,7 +43,9 @@ window.addEventListener("unhandledrejection", (e) =>
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <ErrorBoundary>
-      {crashRequested() ? <CrashProbe /> : <App />}
+      {crashRequested() ? <CrashProbe />
+        : gaugeProbeRequested() ? <GaugeProbe />
+        : <App />}
     </ErrorBoundary>
   </React.StrictMode>,
 );

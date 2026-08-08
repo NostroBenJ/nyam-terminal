@@ -65,17 +65,33 @@ export function Gauge({ gex }: { gex: Gex }) {
   const below = rawSpot < 0;
   const outside = above || below;
 
-  const flipPct = flip === null ? null : clamp(pct(flip));
-  // Hatching runs from the low edge up to the flip. With no flip there is no
-  // regime boundary to draw, and a bare scale is the honest rendering.
-  const hatchTo = flipPct;
+  // THE FLIP MARKER IS NOT CLAMPED, and that distinction is the whole point.
+  //
+  // Clamping put a line labelled FLIP exactly on the put wall whenever the
+  // flip sat below the band — caught by the probe with flip 740 against a put
+  // wall at 763, rendering at 0%. A viewer reads that as "the regime line is
+  // the floor", which is a different market from one where the flip is
+  // twenty-three points lower. Inventing a level's POSITION is the same fault
+  // as inventing its value.
+  //
+  // So the line is drawn only when the flip is genuinely inside the band; when
+  // it exists but sits outside, it is named in the footer with its real price
+  // instead, the way the chart pushes off-frame levels to the edge.
+  const flipInBand = flip !== null && flip >= from && flip <= to;
+  const flipPct = flipInBand ? pct(flip as number) : null;
+
+  // The hatch, by contrast, IS clamped, and correctly: a flip below the band
+  // means none of the visible range is amplifying (0%), and a flip above it
+  // means all of it is (100%). Both are true statements about the band.
+  const hatchTo = flip === null ? null : clamp(pct(flip));
+  const flipOutside = flip !== null && !flipInBand;
 
   const ticks = [0, 12.5, 25, 37.5, 50, 62.5, 75, 87.5, 100];
 
   return (
     <div className="gauge">
       <div className="gauge__scale">
-        {hatchTo !== null && (
+        {hatchTo !== null && hatchTo > 0 && (
           <div
             className="gauge__shoal"
             style={{ width: `${hatchTo}%` }}
@@ -120,10 +136,17 @@ export function Gauge({ gex }: { gex: Gex }) {
         <span className={openLow ? "gauge__open" : ""}>
           {openLow ? "no put wall — open below" : price(from)}
         </span>
+        {/* The legend describes what is ACTUALLY on the scale. It used to say
+            "hatched = hedging amplifies" while rendering no hatching at all,
+            which is a caption for a thing that is not there. */}
         <span className="gauge__legend">
           {hatchTo === null
             ? "no flip in range — regime boundary unknown"
-            : "hatched = hedging amplifies"}
+            : hatchTo <= 0
+              ? `flip ${price(flip as number)} sits below this band — all of it fades`
+              : hatchTo >= 100
+                ? `flip ${price(flip as number)} sits above this band — all of it amplifies`
+                : "hatched = hedging amplifies"}
         </span>
         <span className={openHigh ? "gauge__open" : ""}>
           {openHigh ? "no call wall — open above" : price(to)}
@@ -137,6 +160,15 @@ export function Gauge({ gex }: { gex: Gex }) {
         <p className="gauge__outside">
           Price is <strong>{above ? "above the call wall" : "below the put wall"}</strong> —
           the needle is pinned at the edge, not sitting on the level.
+        </p>
+      )}
+
+      {/* Named rather than drawn, because drawing it would put a line labelled
+          FLIP on top of a wall it is nowhere near. */}
+      {flipOutside && (
+        <p className="gauge__outside">
+          Gamma flip at <strong>{price(flip as number)}</strong> is outside this
+          band, so it has no position on the scale.
         </p>
       )}
     </div>
