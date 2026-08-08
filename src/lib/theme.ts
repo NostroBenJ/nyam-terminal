@@ -12,27 +12,39 @@
 
 export const THEMES = [
   {
+    id: "night",
+    label: "Night",
+    note: "The house style. Ink ground, engraved rules, copper reserved for the live reading.",
+    swatch: ["#14161a", "#5fae8d", "#d4626c", "#d98c3f"],
+  },
+  {
+    id: "day",
+    label: "Day",
+    note: "The same instrument, unlit. Bone ground and ink engraving — untested over a full session.",
+    swatch: ["#e9e7e1", "#2f5d4a", "#8c2f39", "#b3651b"],
+  },
+  {
     id: "terminal",
     label: "Terminal",
-    note: "Deep navy-black, gold accent. The default.",
+    note: "Legacy. Deep navy-black, gold accent.",
     swatch: ["#0a0e14", "#26a69a", "#ef5350", "#e6b450"],
   },
   {
     id: "tradingview",
     label: "TradingView",
-    note: "TradingView's own dark palette. Sits beside a TV chart without fighting it.",
+    note: "Legacy. Useful for A/B-ing a chart against a real TV window.",
     swatch: ["#131722", "#26a69a", "#ef5350", "#2962ff"],
   },
   {
     id: "carbon",
     label: "Carbon",
-    note: "Neutral near-black, highest contrast. Best in a bright room.",
+    note: "Legacy. Neutral near-black, highest contrast.",
     swatch: ["#0b0b0d", "#22c55e", "#f43f5e", "#eab308"],
   },
   {
     id: "slate",
     label: "Slate",
-    note: "Softer greys, lower contrast. Easier over a long session.",
+    note: "Legacy. Softer greys, lower contrast.",
     swatch: ["#161a20", "#3fb950", "#f85149", "#d29922"],
   },
 ] as const;
@@ -40,7 +52,7 @@ export const THEMES = [
 export type ThemeId = (typeof THEMES)[number]["id"];
 
 const KEY = "nyam.theme";
-const DEFAULT: ThemeId = "terminal";
+const DEFAULT: ThemeId = "night";
 
 /** Token cache lives in tokens.ts; this is its invalidator. */
 let onChange: Array<() => void> = [];

@@ -9,6 +9,7 @@ import { DarkPool } from "./components/DarkPool";
 import { GexMatrix } from "./components/GexMatrix";
 import { NetFlow } from "./components/NetFlow";
 import { TodaysTrade } from "./components/TodaysTrade";
+import { Gauge } from "./components/Gauge";
 import { Sidebar, SECTIONS, type SectionId } from "./components/Sidebar";
 import { GexProfile } from "./components/GexProfile";
 import { PriceChart } from "./components/PriceChart";
@@ -201,6 +202,13 @@ export default function App() {
                   anything new — a second place that derives a trade is a
                   second place that can disagree with the first. */}
               <TodaysTrade snap={snap!} />
+              {/* The gauge sits directly under the call because it answers the
+                  next question: not "what's the lean" but "where am I standing
+                  relative to the levels that produced it". */}
+              <Panel title="Position" subtitle="where price sits between the walls"
+                     {...panelProps}>
+                <Gauge gex={snap!.gex} />
+              </Panel>
               <Panel title="Session" subtitle="where you are in the day">
                 <SessionClock compact />
               </Panel>

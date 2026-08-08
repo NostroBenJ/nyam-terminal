@@ -93,7 +93,9 @@ code {
   color: var(--dim);
 }
 .stat__value {
-  font: 500 13px/1 var(--mono);
+  /* Serif, and a size up: these are readings, not log lines. Tabular figures
+     keep the top bar from twitching as they tick. */
+  font: 400 16px/1 var(--serif);
   font-variant-numeric: tabular-nums;
   text-align: left;
   white-space: nowrap;
@@ -325,6 +327,107 @@ code {
 .crash__hint { margin: 0; font-size: 11.5px; color: #6b7684; }
 .crash__hint code { font-family: ui-monospace, monospace; color: #a9b2bd; }
 
+/* --------------------------------------------------------------- gauge -- */
+/* An engraved scale, not a lit widget: hairline ticks, a hatched danger zone,
+   and a solid blade for the needle. Reads the same in Night and Day because it
+   is built from tokens, not from colours. */
+
+.gauge { display: flex; flex-direction: column; }
+.gauge--none {
+  padding: 14px 2px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.gauge__scale {
+  position: relative;
+  height: 58px;
+  margin-top: 22px;                /* room for the needle's value chip */
+  background: var(--panel-2);
+  border-left: 1px solid var(--text);
+  border-right: 1px solid var(--text);
+  border-bottom: 2px solid var(--text);
+}
+
+/* Below the flip. Fine diagonal hatching, the way a chart marks shoal water —
+   a texture you register before you have read anything. */
+.gauge__shoal {
+  position: absolute;
+  top: 0; bottom: 0; left: 0;
+  background: repeating-linear-gradient(
+    45deg, var(--down-soft) 0 1px, transparent 1px 7px);
+}
+
+.gauge__tick {
+  position: absolute;
+  bottom: 0;
+  width: 1px; height: 8px;
+  background: var(--line);
+}
+.gauge__tick--maj { height: 15px; background: var(--text); }
+
+.gauge__lv { position: absolute; top: 0; bottom: 0; width: 1px; }
+.gauge__lv em {
+  position: absolute;
+  top: 6px; left: 5px;
+  font: 500 9px/1 var(--mono);
+  font-style: normal;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.gauge__lv--floor { background: var(--up); }
+.gauge__lv--floor em { color: var(--up); }
+.gauge__lv--ceil { background: var(--down); }
+.gauge__lv--ceil em { left: auto; right: 5px; color: var(--down); }
+.gauge__lv--flip { background: var(--text); }
+.gauge__lv--flip em { color: var(--muted); }
+
+/* THE ONLY COPPER ON THE BOARD. */
+.gauge__needle {
+  position: absolute;
+  top: -8px; bottom: -8px;
+  width: 3px;
+  background: var(--accent);
+}
+.gauge__needle b {
+  position: absolute;
+  top: -23px; left: 50%;
+  transform: translateX(-50%);
+  padding: 3px 7px;
+  background: var(--accent);
+  color: var(--bg);
+  font: 700 11px/1 var(--mono);
+  letter-spacing: .05em;
+  font-variant-numeric: tabular-nums;
+}
+/* Pinned at an edge reads identically to sitting on the level, so it is marked
+   as well as stated in words below. */
+.gauge__needle--pinned { opacity: .82; }
+.gauge__needle--pinned b::after { content: " ▸"; }
+
+.gauge__foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 24px;
+  font: 500 9.5px/1.4 var(--mono);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.gauge__legend { color: var(--dim); text-transform: none; letter-spacing: .04em; }
+.gauge__open { color: var(--dim); font-style: italic; }
+
+.gauge__outside {
+  margin: 12px 0 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.gauge__outside strong { color: var(--accent); font-weight: 600; }
+
 /* --------------------------------------------------------- todays trade -- */
 
 .tt {
@@ -344,13 +447,16 @@ code {
 
 .tt__top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .tt__eyebrow { font: 500 10px/1 var(--mono); color: var(--dim); text-transform: uppercase; letter-spacing: .07em; }
-.tt__lean { font: 700 21px/1.1 var(--mono); letter-spacing: -.01em; }
+/* SERIF FOR VALUES YOU ACT ON. The lean is the single most consequential
+   string on the board, so it carries the house face at the largest size
+   anything gets. Mono here is what made the old board read as a log dump. */
+.tt__lean { font: 400 27px/1.08 var(--serif); letter-spacing: -.02em; }
 .tt__headline { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--text); }
 
 .tt__levels { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; }
 .tt__lvl { display: flex; flex-direction: column; gap: 2px; }
 .tt__lvllabel { font: 500 9px/1 var(--mono); color: var(--dim); text-transform: uppercase; }
-.tt__lvlval { font: 600 13px/1 var(--mono); }
+.tt__lvlval { font: 400 19px/1 var(--serif); font-variant-numeric: tabular-nums; }
 .tt__lvlval--up   { color: var(--up); }
 .tt__lvlval--down { color: var(--down); }
 .tt__lvlval--flip { color: var(--accent); }

@@ -9,7 +9,81 @@
  * :root carries, so the app renders correctly before JS runs.
  */
 
+/* ══════════════════════════════════════════════════════════════════════════
+   INSTRUMENT — the house style. Night is the default; Day is the same object
+   with the engraving inverted, not a different design with the colours swapped.
+
+   The rules that make it coherent, and that every new surface must obey:
+
+   1. COPPER APPEARS ONCE. `--accent` marks where price is NOW and nothing
+      else. Not for selection, not for hover, not for emphasis. In a board of
+      ink on bone (or bone on ink) the only warm thing on screen is the live
+      reading. A UI drifts back into sameness when its accent becomes general
+      decoration; this is the rule that stops that.
+   2. SERIF FOR VALUES, MONO FOR LABELS. Numbers you act on are set in the
+      serif; machine labels, units and keys stay monospace. That split is the
+      whole typographic system.
+   3. DIRECTION IS OXBLOOD AND FOREST, not red and green. Semantic colour is
+      separate from the accent and never borrows it.
+   ══════════════════════════════════════════════════════════════════════════ */
 :root,
+:root[data-theme="night"] {
+  --theme-name: "Night";
+
+  --bg:        #14161a;
+  --panel:     #191c21;
+  --panel-2:   #1e2228;
+  --line:      #262a30;
+
+  --text:      #e8e6df;
+  --muted:     #8d9099;
+  --dim:       #4a4f57;
+
+  /* Direction. Muted against the ground rather than saturated — these sit
+     beside each other all day and a screaming pair is exhausting. */
+  --up:          #5fae8d;
+  --up-soft:     rgba(95, 174, 141, .15);
+  --down:        #d4626c;
+  --down-soft:   rgba(212, 98, 108, .15);
+
+  /* THE NEEDLE COLOUR. Reserved. See rule 1. */
+  --accent:      #d98c3f;
+  --accent-soft: rgba(217, 140, 63, .14);
+
+  /* Non-directional information: structure, references, the confirmer leg. */
+  --neutral:      #6f93a8;
+  --neutral-soft: rgba(111, 147, 168, .15);
+}
+
+/* Day — bone ground, ink engraving. Same instrument, unlit. */
+:root[data-theme="day"] {
+  --theme-name: "Day";
+
+  --bg:        #e9e7e1;
+  --panel:     #e4e2db;
+  --panel-2:   #dedbd3;
+  --line:      #c6c3ba;
+
+  --text:      #15161a;
+  --muted:     #6e6b62;
+  --dim:       #a8a49a;
+
+  --up:          #2f5d4a;
+  --up-soft:     rgba(47, 93, 74, .14);
+  --down:        #8c2f39;
+  --down-soft:   rgba(140, 47, 57, .14);
+
+  --accent:      #b3651b;
+  --accent-soft: rgba(179, 101, 27, .14);
+
+  --neutral:      #3f5f70;
+  --neutral-soft: rgba(63, 95, 112, .14);
+}
+
+/* ── legacy themes ─────────────────────────────────────────────────────────
+   Kept so a switch back is one click while the new design settles, and
+   because the TradingView palette is genuinely useful for A/B-ing a chart
+   against theirs. They are no longer the house style. */
 :root[data-theme="terminal"] {
   --theme-name: "Terminal";
 
@@ -113,10 +187,23 @@
   --neutral-soft: rgba(88, 166, 255, .16);
 }
 
-/* Shared, theme-independent. */
+/* Shared, theme-independent.
+ *
+ * THREE FACES, THREE JOBS, and the division is the typographic system:
+ *   --serif  values you act on — spot, levels, the written read
+ *   --mono   machine labels, units, keys, and any dense tabular grid
+ *   --sans   prose and controls
+ *
+ * The old board set everything in mono at one weight, which is why it read as
+ * generated: no hierarchy means no voice. The serif is doing the work the
+ * accent used to be asked to do. */
 :root {
   --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* A high-contrast old-style face with genuine character in the numerals.
+   * Iowan and Palatino ship on macOS/Windows respectively; Georgia is the
+   * floor and is still far from the developer-default look. */
+  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
 
   --row-h:     26px;
   --panel-pad: 14px;
