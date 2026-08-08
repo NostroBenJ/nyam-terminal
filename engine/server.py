@@ -35,7 +35,7 @@ import chat as chat_mod
 import config
 from pipeline import build_snapshot
 from logging_obsidian import log_to_obsidian
-from analysis import tracker
+from analysis import changes, tracker
 import store as store_mod
 from analysis import sessions
 from claude_brief import generate_brief_meta
@@ -463,6 +463,22 @@ async def api_chat(request: Request):
             yield f"[chat failed] {type(e).__name__}: {e}"
 
     return StreamingResponse(gen(), media_type="text/plain; charset=utf-8")
+
+
+@app.get("/api/changed")
+def api_changed(ticker: str = None):
+    """
+    What moved since the prior session's capture.
+
+    Reads the live snapshot rather than rebuilding, so this never triggers a
+    fetch — it is a comparison of two things that already exist.
+    """
+    t = (ticker or _active["ticker"]).upper()
+    with _lock:
+        snap = _latest.get(t)
+    if snap is None:
+        snap = refresh(t)
+    return JSONResponse(changes.build(snap, ticker=t))
 
 
 @app.post("/api/log")

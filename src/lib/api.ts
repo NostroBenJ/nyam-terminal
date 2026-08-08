@@ -520,6 +520,34 @@ export interface GexMatrix {
   loaded: number;
 }
 
+export interface Change {
+  key: string;
+  label: string;
+  before: number | string | null;
+  after: number | string | null;
+  move: number | null;
+  pct: number | null;
+  /** Move as a share of spot — the only scale comparable across tickers. */
+  of_spot: number | null;
+  /** Decision impact, not magnitude. 0 = regime flip, 7 = the call itself. */
+  rank: number;
+  kind: "level" | "regime" | "size" | "vol" | "call";
+  note: string | null;
+  /** False when the field exists on only one side — not a move. */
+  known: boolean;
+}
+
+export interface Changes {
+  available: boolean;
+  baseline_date: string | null;
+  baseline_at?: string | null;
+  age_days?: number | null;
+  changes: Change[];
+  note: string | null;
+  /** Baseline older than a long weekend — it is not "since yesterday". */
+  stale_baseline?: boolean;
+}
+
 export interface DarkPoolPrint {
   ticker: string | null;
   price: number;
@@ -567,6 +595,8 @@ export const api = {
   journal: (ticker: string) =>
     req<Journal>(`/api/journal?ticker=${encodeURIComponent(ticker)}`),
   capture: () => req<CaptureStatus>("/api/capture"),
+  changed: (ticker: string) =>
+    req<Changes>(`/api/changed?ticker=${encodeURIComponent(ticker)}`),
   saveNote: (ticker: string, date: string, note: string) =>
     req<{ ok: boolean }>("/api/journal/note", {
       method: "POST",

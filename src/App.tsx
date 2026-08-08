@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useRef, useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { api, waitForEngine, type Health, type Snapshot } from "./lib/api";
 import { ageSeconds, ageLabel, freshness } from "./lib/format";
@@ -8,12 +8,12 @@ import { UwBudget } from "./components/UwBudget";
 import { DarkPool } from "./components/DarkPool";
 import { GexMatrix } from "./components/GexMatrix";
 import { NetFlow } from "./components/NetFlow";
-import { TodaysTrade } from "./components/TodaysTrade";
-import { Gauge } from "./components/Gauge";
+import { TheCall } from "./components/TheCall";
+import { WhatChanged } from "./components/WhatChanged";
+import { StatusStrip } from "./components/StatusStrip";
 import { Sidebar, SECTIONS, type SectionId } from "./components/Sidebar";
 import { GexProfile } from "./components/GexProfile";
 import { PriceChart } from "./components/PriceChart";
-import { BiasPanel } from "./components/BiasPanel";
 import { LevelMap } from "./components/LevelMap";
 import { NewsRail } from "./components/NewsRail";
 import { EventRisk } from "./components/EventRisk";
@@ -192,35 +192,30 @@ export default function App() {
                      {...panelProps} right={pop("chart")} grow>
                 <PriceChart key={theme} gex={snap!.gex} ticker={snap!.ticker} />
               </Panel>
-              <Panel title="Level map" subtitle="high to low" {...panelProps}>
-                <LevelMap rows={snap!.level_map} spot={snap!.gex.spot} />
-              </Panel>
+              {/* The level map that sat here repeated what The Call and the
+                  gauge now show. The full ordered list still lives in Gamma,
+                  which is where you go for every level rather than the three
+                  that bound today. The chart owns this column outright. */}
             </div>
             <div className="grid__col">
               {/* Top of the right column, above everything: the one-glance
                   answer. Composed from plan + bias rather than computing
                   anything new — a second place that derives a trade is a
                   second place that can disagree with the first. */}
-              <TodaysTrade snap={snap!} />
-              {/* The gauge sits directly under the call because it answers the
-                  next question: not "what's the lean" but "where am I standing
-                  relative to the levels that produced it". */}
-              <Panel title="Position" subtitle="where price sits between the walls"
+              {/* ONE SURFACE, not three. Today, Bias and Level Map each stated
+                  the same conclusion in a different shape at the same visual
+                  weight, which is how a board loses its focal point. The
+                  reasoning is not gone — it is behind the "why" toggle. */}
+              <TheCall snap={snap!} />
+              {/* The only panel that answers a question the others cannot:
+                  what is DIFFERENT from when you last looked. */}
+              <Panel title="What changed" subtitle="since the prior session's close"
                      {...panelProps}>
-                <Gauge gex={snap!.gex} />
-              </Panel>
-              <Panel title="Session" subtitle="where you are in the day">
-                <SessionClock compact />
+                <WhatChanged ticker={snap!.ticker} />
               </Panel>
               <Panel title="Net premium" subtitle={`${snap!.ticker} · calls minus puts, today`}
                      {...panelProps}>
                 <NetFlow flow={snap!.net_flow} />
-              </Panel>
-              <Panel title="Bias" subtitle={`confirmed vs ${snap!.confirmer}`} {...panelProps}>
-                <BiasPanel bias={snap!.bias} />
-              </Panel>
-              <Panel title="Event risk" subtitle="what News Risk is reading" {...panelProps}>
-                <EventRisk news={snap!.news} />
               </Panel>
               <Panel title="Headlines" subtitle={snap!.ticker} right={pop("news")}>
                 <NewsRail ticker={snap!.ticker} compact />
@@ -251,7 +246,7 @@ export default function App() {
             </div>
             <div className="grid__col">
               <Panel title="Gamma matrix"
-                     subtitle={`strike × expiry · ${snap!.matrix?.loaded ?? 0} expiries`}
+                     subtitle={`strike Ã— expiry · ${snap!.matrix?.loaded ?? 0} expiries`}
                      {...panelProps}>
                 <GexMatrix grid={snap!.matrix} />
               </Panel>
@@ -369,6 +364,12 @@ export default function App() {
               </Panel>
             </div>
             <div className="grid__col">
+              {/* Moved off the Board with the strip change. The strip flags
+                  that a high-impact event EXISTS; this is where you read what
+                  the News Risk signal is actually looking at. */}
+              <Panel title="Event risk" subtitle="what News Risk is reading" {...panelProps}>
+                <EventRisk news={snap!.news} />
+              </Panel>
               <Panel title="Week ahead" subtitle="scheduled — not yet happened">
                 <WeekAhead />
               </Panel>
@@ -401,8 +402,14 @@ export default function App() {
         return (
           <div className="grid">
             <div className="grid__col">
-              <Panel title="Appearance & windows" subtitle="theme and screen layout" grow>
+              <Panel title="Appearance & windows" subtitle="theme and screen layout">
                 <Settings />
+              </Panel>
+              {/* The strip carries the glance — clock and active session. The
+                  full breakdown (every session, your traded window, the
+                  countdown) lives here rather than being deleted. */}
+              <Panel title="Session detail" subtitle="every window, and where you are in it">
+                <SessionClock />
               </Panel>
             </div>
             <div className="grid__col">
@@ -520,6 +527,11 @@ export default function App() {
           these are not current levels. Refreshing now.
         </div>
       )}
+
+      {/* Session, event risk and the API budget were three full panels for
+          things you glance at once. One line recovers a third of the right
+          column and puts weight where attention actually goes. */}
+      <StatusStrip snap={snap} />
 
       <div className="shell">
         <Sidebar active={section} onSelect={goSection} />
