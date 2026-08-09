@@ -72,6 +72,21 @@ export interface LevelMapRow {
   confluence: boolean;
 }
 
+/** A session level (prior day high, overnight low…) sitting on a GEX level. */
+export interface Confluence {
+  price: number;
+  label: string;
+}
+
+/** A level several expirations independently agree on. */
+export interface ExpiryConfluence {
+  type: string;
+  price: number;
+  count: number;
+  total: number;
+  full: boolean;
+}
+
 export interface ExpectedMove {
   dollars: number;
   pct: number;
@@ -161,6 +176,13 @@ export interface Snapshot {
   gex: Gex;
   expected_move: ExpectedMove;
   level_map: LevelMapRow[];
+  /**
+   * Where a session level lands on a GEX level, and where several expirations
+   * agree. Both were on the wire from the start and declared by nothing, so
+   * the only reader was chat.py feeding them to the model.
+   */
+  confluences: Confluence[];
+  expiry_confluence: ExpiryConfluence[];
   levels: Record<string, number>;
   smt: { signal: string; lean: number; note: string };
   bias: Bias;
@@ -394,9 +416,18 @@ export interface JournalRecord {
     correct: boolean;
     actual_dir: string;
     move_pct: number;
+    /**
+     * The two prices the grade was computed from. On the wire from the start
+     * and declared by nothing, so a call could be marked a miss with no way
+     * to check the arithmetic behind it.
+     */
+    open?: number;
+    exit?: number;
     rule?: string;
     note?: string;
   } | null;
+  /** Which signal mix produced the call; the track record splits on it. */
+  mix?: string;
   /** Absent on records written before context capture existed. */
   context?: {
     regime?: string;

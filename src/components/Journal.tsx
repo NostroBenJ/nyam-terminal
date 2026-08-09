@@ -131,6 +131,22 @@ export function Journal({ ticker }: { ticker: string }) {
 
                 {isOpen && (
                   <div className="jrow__body">
+                    {/* HOW THE GRADE WAS ARRIVED AT. The two prices and the
+                        rule were on the wire from the start and shown nowhere,
+                        so a call could be marked a miss with no way to check
+                        the arithmetic. On a record of six graded calls, an
+                        unauditable grade is worse than no grade. */}
+                    {o && (
+                      <div className="jctx jctx--grade">
+                        <Field label="open" value={price(o.open)} />
+                        <Field label="exit" value={price(o.exit)} />
+                        <Field
+                          label="move"
+                          value={`${o.move_pct > 0 ? "+" : ""}${o.move_pct.toFixed(2)}%`}
+                        />
+                        <Field label="rule" value={o.rule} />
+                      </div>
+                    )}
                     {r.context ? (
                       <>
                         <div className="jctx">

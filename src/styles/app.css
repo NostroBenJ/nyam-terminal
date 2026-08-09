@@ -1139,6 +1139,31 @@ code {
 /* Two levels landing on one price. The chip sat flush against the role text,
    since .chip carries no margin of its own. */
 .levels__conf { margin-left: 6px; vertical-align: middle; }
+
+/* Stacked levels — a session level on a gamma level, and levels several
+   expiries agree on. Both were computed and shipped from the start with
+   nothing rendering them. Kept quiet and dense: this sits under the level
+   table and must not out-shout it. */
+.conf { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; }
+.conf + .conf { margin-top: 8px; }
+.conf__head {
+  font: 500 9px/1 var(--mono);
+  letter-spacing: 0.09em;
+  color: var(--dim);
+  margin-bottom: 6px;
+}
+.conf__row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 2px 0;
+}
+/* NOT --accent. Rule 1 in tokens.css: copper marks where price is NOW and
+   nothing else, and this put it on seven structural levels at once. --neutral
+   is the token for exactly this — "structure, references". */
+.conf__price { color: var(--neutral); font-size: 12px; min-width: 62px; }
+.conf__label { color: var(--muted); font-size: 11px; flex: 1; }
+.conf__dist { color: var(--dim); font-size: 11px; }
 .levels__tag {
   font: 500 9px/1 var(--mono);
   letter-spacing: .05em;
@@ -1280,6 +1305,13 @@ code {
   grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
   gap: 8px;
   margin-bottom: 10px;
+}
+/* How the grade was computed, set apart from the positioning context above
+   it — these are observed prices, not the morning's model. */
+.jctx--grade {
+  border-left: 2px solid var(--line);
+  padding-left: 10px;
+  margin-bottom: 12px;
 }
 .jctx__f { display: flex; flex-direction: column; gap: 2px; }
 .jctx__k {

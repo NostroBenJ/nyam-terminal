@@ -251,7 +251,12 @@ export default function App() {
                 <GexMatrix grid={snap!.matrix} />
               </Panel>
               <Panel title="Level map" subtitle="high to low" {...panelProps}>
-                <LevelMap rows={snap!.level_map} spot={snap!.gex.spot} />
+                <LevelMap
+                  rows={snap!.level_map}
+                  spot={snap!.gex.spot}
+                  confluences={snap!.confluences}
+                  expiryConfluence={snap!.expiry_confluence}
+                />
               </Panel>
               <Panel title="Level check" subtitle="ours vs Unusual Whales">
                 {snap!.level_check?.length ? (
