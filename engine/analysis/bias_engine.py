@@ -150,6 +150,23 @@ def build_bias(gex: dict, levels: dict, smt: dict, news: dict, em: dict = None,
 # one is a RATIO or a count, never a dollar figure: an absolute premium
 # threshold that means "significant" on SPY means "enormous" on IWM, and the
 # same engine grades both.
+#
+# THESE ARE GUESSES, AND UNLIKE THE OTHER CONSTANTS THEY HAVE NOT BEEN
+# MEASURED. RISK_FREE_RATE and GEX_MAX_DTE were perturbed against a live chain
+# and their impact is documented in config.py; these five were picked from a
+# single quiet after-hours tape, which is the worst possible sample for
+# thresholds meant to separate signal from noise during real volume.
+#
+# The failure modes are opposite and both plausible: too tight and they abstain
+# through every session, contributing nothing while appearing to work; too
+# loose and they vote on noise with real weight attached. On the first live run
+# two of three abstained, which is consistent with either.
+#
+# Re-derive them once there are graded sessions: for each threshold, the
+# question is whether calls where the signal fired beat calls where it did not.
+# Until then they are provisional, and their combined weight is deliberately
+# capped below the positioning signals so a bad threshold cannot swing a call
+# on its own.
 NET_PREM_MIN_SHARE = 0.15   # |net| as a share of total premium traded
 FLOW_MIN_ALERTS = 3         # fewer than this is anecdote, not flow
 FLOW_MIN_SKEW = 0.60        # one side must hold 60% of qualifying premium

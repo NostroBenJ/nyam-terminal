@@ -124,8 +124,34 @@ def confirmer_for(ticker: str) -> str:
 
 # How many expirations to roll into the GEX aggregation.
 # 0DTE + near-dated dominate dealer hedging into the open, so keep this tight.
+# THIS IS A MODELLING CHOICE, NOT A TUNING KNOB. Measured against a live SPY
+# chain — the window does not adjust the answer, it selects it:
+#
+#     dte    flip     put wall    net gex
+#       3   769.92      765.0       834M
+#       7   764.52      763.0      3.75B     <- current
+#      14   763.90      755.0      6.36B
+#
+# Going 7 -> 14 moves the put wall EIGHT POINTS and quadruples net gamma. That
+# is where a stop goes. Changing this changes every level, therefore every
+# call, therefore the track record: bump bias_engine.MIX_VERSION alongside it
+# or the hit rate silently averages two different systems.
+#
+# 7 is defensible — 0DTE and near-dated dominate dealer hedging into the open,
+# which is the window these calls are made for — but it is a decision, and it
+# is the reason our put wall sits further from spot than UW's full-chain scan.
 GEX_MAX_DTE = 7            # include expiries within this many days
-RISK_FREE_RATE = 0.043     # ~current short rate; only affects gamma slightly
+
+# NOT load-bearing, and now measured rather than asserted. Across r from 0.00
+# to 0.08 — far wider than short rates will move — the flip shifts 0.7 points
+# in total and the call wall, put wall and magnet do not move at all. Net gamma
+# drifts ~5%.
+#
+# So this being a stale snapshot of a rate that changes does NOT matter, which
+# is worth knowing precisely because it looks like the sort of thing that would.
+# verify_constants.py pins the insensitivity, so if the model ever changes in a
+# way that makes r matter, that fails rather than passing quietly.
+RISK_FREE_RATE = 0.043     # ~short rate; verified low-impact, see above
 
 # ----------------------------------------------------------------------------
 # SCHEDULE (all times America/New_York)
