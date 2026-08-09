@@ -1136,6 +1136,9 @@ code {
 .levels__price--watch { color: var(--text); }
 
 .levels__role { color: var(--muted); font-size: 11px; }
+/* Two levels landing on one price. The chip sat flush against the role text,
+   since .chip carries no margin of its own. */
+.levels__conf { margin-left: 6px; vertical-align: middle; }
 .levels__tag {
   font: 500 9px/1 var(--mono);
   letter-spacing: .05em;

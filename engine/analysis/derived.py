@@ -84,23 +84,28 @@ def build_level_map(gex: dict) -> list:
     # importance. When the flip landed on the magnet or on spot, the
     # "Gamma Flip / REGIME LINE" row was silently dropped, which is the one
     # moment it matters most: price sitting on the line the regime turns at.
+    # `short` is used when roles are joined. The full names read well alone but
+    # concatenate into something that wraps in the panel's column — "Call Wall
+    # / Ceiling + Control Node / Magnet" is 42 characters to say "Call Wall +
+    # Magnet", and the wrap made the merged row half again as tall as every
+    # other row in a table whose whole value is being scannable at a glance.
     rows = []
     if cw:
-        rows.append({"price": cw, "role": "Call Wall / Ceiling", "tag": "FADE / EXIT",
-                     "cls": "down", "rank": 1})
+        rows.append({"price": cw, "role": "Call Wall / Ceiling", "short": "Call Wall",
+                     "tag": "FADE / EXIT", "cls": "down", "rank": 1})
     if mag:
-        rows.append({"price": mag, "role": "Control Node / Magnet", "tag": "PIN",
-                     "cls": "mag", "rank": 2})
-    rows.append({"price": spot, "role": "Spot — Current", "tag": "WATCH",
-                 "cls": "watch", "rank": 3})
+        rows.append({"price": mag, "role": "Control Node / Magnet", "short": "Magnet",
+                     "tag": "PIN", "cls": "mag", "rank": 2})
+    rows.append({"price": spot, "role": "Spot — Current", "short": "Spot",
+                 "tag": "WATCH", "cls": "watch", "rank": 3})
     if flip:
-        rows.append({"price": flip, "role": "Gamma Flip", "tag": "REGIME LINE",
-                     "cls": "flip", "rank": 0})
+        rows.append({"price": flip, "role": "Gamma Flip", "short": "Gamma Flip",
+                     "tag": "REGIME LINE", "cls": "flip", "rank": 0})
     if pw:
         tag = "ACCEL / PUTS ONLY" if neg else "FLOOR / BUY DIPS"
         cls = "down" if neg else "up"
-        rows.append({"price": pw, "role": "Put Wall / Floor", "tag": tag,
-                     "cls": cls, "rank": 1})
+        rows.append({"price": pw, "role": "Put Wall / Floor", "short": "Put Wall",
+                     "tag": tag, "cls": cls, "rank": 1})
 
     # Coincident levels are MERGED, not discarded. Two things pointing at one
     # price is confluence — the highest-conviction reaction point there is, and
@@ -115,13 +120,17 @@ def build_level_map(gex: dict) -> list:
     for price, group in by_price.items():
         group.sort(key=lambda r: r["rank"])
         lead = group[0]
-        roles = list(dict.fromkeys(r["role"] for r in group))
+        # One level keeps its full descriptive name; several use short ones.
+        if len(group) == 1:
+            role = lead["role"]
+        else:
+            role = " + ".join(dict.fromkeys(r["short"] for r in group))
         merged.append({
             "price": price,
-            "role": " + ".join(roles),
+            "role": role,
             "tag": lead["tag"],
             "cls": lead["cls"],
-            "confluence": len(roles) > 1,
+            "confluence": len(group) > 1,
         })
     merged.sort(key=lambda r: -r["price"])
     return merged

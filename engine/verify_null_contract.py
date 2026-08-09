@@ -78,6 +78,15 @@ KNOWN_NULLABLE = {
     # the list is that entering something on it is a claim you looked.
     "brief_meta.error":
         "null when the brief generated cleanly; UI renders it only when set",
+    # These two only appear while the brief is still being written, which is
+    # why earlier runs of this suite never saw them — the brief had finished.
+    # Checked at the use site: Brief.tsx read `calls_today !== undefined`, and
+    # null passes that, so the cost meter rendered " calls today" with no
+    # number. Now `!= null`, and both fields are typed nullable.
+    "brief_meta.age_s":
+        "null until the brief exists; Brief.tsx guards with a truthy check",
+    "brief_meta.calls_today":
+        "null while the brief is pending; Brief.tsx guards with `!= null`",
     "level_check[].agree":
         "null where a definitional difference makes grading meaningless "
         "(see pipeline.FLIP_NOTE); App.tsx renders those muted, not as drift",

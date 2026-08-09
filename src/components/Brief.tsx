@@ -50,7 +50,11 @@ export function Brief({ snap }: { snap: Snapshot }) {
             budget cap
           </span>
         )}
-        {meta?.calls_today !== undefined && (
+        {/* `!= null` catches BOTH null and undefined. This read `!== undefined`,
+            and the engine sends null while the brief is still pending — so the
+            block rendered with {null} in place of the count and the meter read
+            " calls today" with no number in it. */}
+        {meta?.calls_today != null && (
           <span className="brief__calls" title="Model calls spent on this ticker today">
             {meta.calls_today} call{meta.calls_today === 1 ? "" : "s"} today
           </span>

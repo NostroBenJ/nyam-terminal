@@ -26,7 +26,9 @@ export function LevelMap({ rows, spot }: { rows: LevelMapRow[]; spot: number }) 
                   the magnet or on spot. */}
               <td className="levels__role">
                 {r.role}
-                {r.confluence && <span className="chip chip--warn">confluence</span>}
+                {r.confluence && (
+                  <span className="chip chip--warn levels__conf">confluence</span>
+                )}
               </td>
               <td className={`levels__tag levels__tag--${r.cls}`}>{r.tag}</td>
               <td className="levels__dist num">

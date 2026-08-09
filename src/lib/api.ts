@@ -173,9 +173,14 @@ export interface Snapshot {
     error: string | null;
     /** True when reused because the underlying read hasn't changed. */
     cached?: boolean;
-    age_s?: number;
-    /** Model calls spent on this ticker today — the cost meter. */
-    calls_today?: number;
+    /** Null while the brief is still pending — not merely absent. */
+    age_s?: number | null;
+    /**
+     * Model calls spent on this ticker today — the cost meter. NULL while the
+     * brief is pending, so a `!== undefined` check passes and renders the
+     * count as nothing. Typed nullable because it is.
+     */
+    calls_today?: number | null;
     budget_capped?: boolean;
   };
   /** Event risk. `kind: "landed"` means news that already published — this is
