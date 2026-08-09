@@ -288,7 +288,10 @@ def status(limit: int = 30) -> dict:
         have = {d["date"] for d in days}
         if have:
             since = dt.date.fromisoformat(min(have))
-            cur = dt.date.today()
+            # Capture folders are named from ET (see run()), so the audit that
+            # compares against them has to use the same clock or it invents a
+            # missing day every evening on a non-ET host.
+            cur = config.today()
             # Bounded by the FIRST CAPTURE, not by an arbitrary window. The old
             # `range(1, 40)` silently capped the audit at forty days, so after
             # three months of recording the earliest gaps became invisible —

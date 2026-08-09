@@ -597,7 +597,7 @@ def _live_ticker(yf, symbol: str, with_chain: bool) -> dict:
     # current day already has a daily bar depends on the time of day you run
     # this, so indexing a fixed iloc[-2] silently shifts the reference day by
     # one during pre-market -- exactly when this tool is meant to be used.
-    today = dt.date.today()
+    today = config.today()
     last_idx = hist.index[-1].date()
     prior = hist.iloc[-2] if last_idx >= today else hist.iloc[-1]
 
@@ -608,7 +608,7 @@ def _live_ticker(yf, symbol: str, with_chain: bool) -> dict:
     fresh = hit and (_time.time() - hit["at"]) < config.CHAIN_REFRESH_SECONDS
     # A cache entry that predates the current session is never reused: expiries
     # roll and yesterday's chain would be quietly wrong rather than merely old.
-    if fresh and hit.get("day") != dt.date.today():
+    if fresh and hit.get("day") != config.today():
         fresh = False
 
     if fresh and (not with_chain or hit.get("expiries") is not None):
@@ -618,7 +618,7 @@ def _live_ticker(yf, symbol: str, with_chain: bool) -> dict:
         on_high, on_low, on_is_real = _overnight_range(tk, prior)
         expiries = _live_expiries(tk) if with_chain else None
         _chain_cache[key] = {
-            "at": _time.time(), "day": dt.date.today(),
+            "at": _time.time(), "day": config.today(),
             "overnight": (on_high, on_low, on_is_real), "expiries": expiries,
         }
 
@@ -685,7 +685,9 @@ def _overnight_range(tk, prior) -> tuple:
 
 def _live_expiries(tk) -> list:
     """Return a list of per-expiration chains shaped for compute_gex()."""
-    today = dt.date.today()
+    # Exchange day — same reason as chain_to_expiries on the UW side. DTE feeds
+    # t_years feeds gamma, and a one-day error moves near-dated gamma by ~33%.
+    today = config.today()
     expiries = []
     for exp in tk.options:
         exp_date = dt.date.fromisoformat(exp)

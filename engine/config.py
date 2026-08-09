@@ -4,6 +4,7 @@ Central configuration for the NYAM Bias Engine.
 Everything you'll want to tweak lives here so you don't have to dig through
 the code. Read the comments — they explain WHY each setting exists.
 """
+import datetime as dt
 import os
 import sys
 from zoneinfo import ZoneInfo
@@ -130,6 +131,33 @@ RISK_FREE_RATE = 0.043     # ~current short rate; only affects gamma slightly
 # SCHEDULE (all times America/New_York)
 # ----------------------------------------------------------------------------
 TZ = ZoneInfo("America/New_York")
+
+
+def today() -> dt.date:
+    """
+    The current TRADING day, in exchange time. Use this, never date.today().
+
+    date.today() returns the MACHINE'S local date, and the engine had both
+    forms scattered through it: capture folders named from ET, the missed-days
+    audit comparing those folders against a local date, grading deciding what
+    counts as "past" locally, and — worst — chain_to_expiries computing DTE
+    locally.
+
+    On a machine sitting in ET the two agree and nothing shows. On a UTC host
+    they diverge every evening after 8pm ET, and a DTE wrong by one day changes
+    t_years, which changes gamma, which changes every level on the board.
+    Silently, and only outside the timezone it was written in.
+
+    A server was already under discussion, so this is not hypothetical.
+    """
+    return dt.datetime.now(TZ).date()
+
+
+def now_et() -> dt.datetime:
+    """Timezone-aware current time in exchange time."""
+    return dt.datetime.now(TZ)
+
+
 PREMARKET_START = "07:00"   # begin auto-refreshing
 MARKET_OPEN = "09:30"       # the moment your bias is for
 REFRESH_SECONDS = 60        # frontend polls /api/bias this often

@@ -88,7 +88,9 @@ def load(ticker: str, max_age_days: int = 5) -> dict | None:
 
     stamp = str(snap.get("generated_at") or "")[:10]
     try:
-        age_days = (dt.date.today() - dt.date.fromisoformat(stamp)).days
+        # generated_at is stamped in ET, so the comparison has to be too or a
+        # board saved this evening reads as a day old on a UTC host.
+        age_days = (config.today() - dt.date.fromisoformat(stamp)).days
     except ValueError:
         return None
     if age_days > max_age_days or age_days < 0:

@@ -51,7 +51,7 @@ def prior_capture(ticker: str, before: dt.date = None) -> tuple:
     and looks like the panel is broken rather than like there is no comparison
     to make.
     """
-    before = before or dt.date.today()
+    before = before or config.today()
     root = _capture_root()
     try:
         days = sorted(os.listdir(root), reverse=True)
@@ -111,7 +111,9 @@ def build(current: dict, ticker: str = None, today: dt.date = None) -> dict:
     opposite things.
     """
     ticker = (ticker or current.get("ticker") or config.PRIMARY_TICKER).upper()
-    today = today or dt.date.today()
+    # Exchange day: the baseline is "the prior TRADING session", and capture
+    # folders are named in ET.
+    today = today or config.today()
     base_date, base = prior_capture(ticker, before=today)
 
     if base is None:

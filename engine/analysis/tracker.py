@@ -172,7 +172,10 @@ def grade_pending(get_ohlc) -> dict:
     rather than never.
     """
     recs = store.load()
-    today = dt.date.today().isoformat()
+    # Exchange day, not host day. A record filed for the ET trading day would
+    # look "past" to a UTC host after 8pm ET and be graded against a session
+    # that has not finished.
+    today = config.today().isoformat()
     changed = False
     failed = 0
     for rec in recs.values():
@@ -269,7 +272,7 @@ def ensure_seeded() -> None:
     out = {}
     for ticker in config.TICKERS:
         random.seed(hash(ticker) % 10_000)   # per-ticker but reproducible
-        count, d = 0, dt.date.today() - dt.timedelta(days=1)
+        count, d = 0, config.today() - dt.timedelta(days=1)
         base = 100 + (hash(ticker) % 600)
         while count < 22:
             if d.weekday() < 5:

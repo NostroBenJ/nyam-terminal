@@ -106,7 +106,7 @@ def _uw_flow(ticker: str, spot: float, limit: int) -> list:
     from data import unusual_whales as uw
 
     alerts = uw.flow_alerts(ticker, limit=limit) or []
-    today = dt.date.today()
+    today = config.today()          # exchange day: this feeds DTE
     rows = []
     for a in alerts:
         try:

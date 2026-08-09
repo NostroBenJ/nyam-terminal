@@ -140,7 +140,7 @@ def earnings_week(tickers=None, horizon_days: int = EARNINGS_HORIZON_DAYS) -> tu
     import logging
     logging.getLogger("yfinance").setLevel(logging.CRITICAL)
 
-    today = dt.date.today()
+    today = config.today()          # exchange day, like every other date here
     horizon = today + dt.timedelta(days=horizon_days)
     for sym in tickers:
         try:

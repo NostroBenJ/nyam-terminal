@@ -105,7 +105,9 @@ def _signature(bias, gex, levels, smt, news, ticker) -> str:
 
 def _budget_ok(ticker: str) -> bool:
     """Per-ticker daily call ceiling. Resets on date change."""
-    today = _dt.date.today().isoformat()
+    # Exchange day: the cap is "calls per trading day", and on a UTC host a
+    # local reset would hand you a fresh budget mid-session.
+    today = config.today().isoformat()
     if _calls["date"] != today:
         _calls["date"] = today
         _calls["n"] = {}

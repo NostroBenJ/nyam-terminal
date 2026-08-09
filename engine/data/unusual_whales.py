@@ -80,7 +80,8 @@ def _counter_path() -> str:
 
 
 def _bump():
-    today = dt.date.today().isoformat()
+    # The daily request budget resets on the exchange's day, not the host's.
+    today = config.today().isoformat()
     if _counter["date"] != today:
         _counter.update(_load_counter(today))
     _counter["count"] += 1
@@ -105,7 +106,8 @@ def _load_counter(today: str) -> dict:
 
 def budget() -> dict:
     """Today's request usage. Safe to call with no key set."""
-    today = dt.date.today().isoformat()
+    # The daily request budget resets on the exchange's day, not the host's.
+    today = config.today().isoformat()
     c = _counter if _counter["date"] == today else _load_counter(today)
     used = c["count"]
     return {
@@ -389,7 +391,9 @@ def chain_to_expiries(contracts: list, max_dte: int, today: dt.date = None) -> l
     SPY260724C00600000) when UW doesn't hand back parsed fields — the strike and
     right are encoded in the last 15 characters of that symbol.
     """
-    today = today or dt.date.today()
+    # config.today(), not date.today(): DTE feeds t_years feeds gamma. A date
+    # off by one on a non-ET host mis-prices the entire chain.
+    today = today or config.today()
     by_expiry = {}
     for c in contracts:
         sym = c.get("option_symbol") or c.get("option_chain") or ""
@@ -476,7 +480,9 @@ def prior_session(ticker: str, today: dt.date = None) -> dict:
     date carry their own high/low, and mixing them in would report an overnight
     spike as part of the regular range.
     """
-    today = today or dt.date.today()
+    # config.today(), not date.today(): DTE feeds t_years feeds gamma. A date
+    # off by one on a non-ET host mis-prices the entire chain.
+    today = today or config.today()
     rows = ohlc(ticker, candle_size="1d", limit=30)
     regular = []
     for r in rows:
