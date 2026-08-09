@@ -77,6 +77,13 @@ tags: [trading, nyam, bias]
 - [ ] Followed the bias or faded it? Why?
 - [ ] Outcome + what the P&L was actually driven by (direction / levels / news):
 """
-    with open(path, "w") as f:
+    # encoding="utf-8" is NOT optional here. Windows defaults text writes to
+    # cp1252, and this file embeds the Claude brief — prose that routinely
+    # contains characters cp1252 has no code for. Reproduced: an arrow raises
+    # UnicodeEncodeError and the export dies, and "766.14 -> 764.52" written
+    # with a real arrow is exactly how this app phrases a moved gamma flip.
+    # Em-dashes and curly quotes happen to survive cp1252, which is why this
+    # would have looked fine right up until the day it did not.
+    with open(path, "w", encoding="utf-8") as f:
         f.write(md)
     return path

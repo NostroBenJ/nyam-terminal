@@ -23,3 +23,8 @@ engine/dist/
 data_store/
 *.csv
 *.log
+
+# Generated journal notes. The vault is an OUTPUT of the app, not source, and
+# a verification run used to leave a dated note here before the suite
+# sandboxed it.
+engine/obsidian_out/

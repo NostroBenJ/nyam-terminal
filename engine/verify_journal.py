@@ -13,6 +13,7 @@ or never.
     python verify_journal.py
 """
 import datetime as dt
+import os
 import shutil
 import tempfile
 
@@ -129,6 +130,41 @@ def main():
         old = [x for x in tracker.journal("SPY") if x["date"] == "2026-07-30"]
         check("legacy record loads", len(old) == 1)
         check("legacy record has no context", old and old[0].get("context") is None)
+
+        print("[9] the Obsidian export survives what Claude actually writes")
+        # This wrote with open(path, "w") and no encoding, so it took the
+        # Windows cp1252 default. Em-dashes and curly quotes happen to EXIST
+        # in cp1252, which is why it looked fine — but an arrow does not, and
+        # "766.14 -> 764.52" with a real arrow is exactly how this app phrases
+        # a moved gamma flip. Reproduced as UnicodeEncodeError before fixing.
+        import logging_obsidian
+        # Sandbox the vault too — the rest of this suite redirects STORE_DIR,
+        # and a verification run should not leave a dated note behind.
+        config.OBSIDIAN_VAULT = os.path.join(_TMP, "vault")
+        hostile = ("Bias — NEUTRAL. Gamma flip 766.14 → 764.52, net "
+                   "gamma ≈ -23.7%, 1σ “range” day. • put wall 763")
+        s = {
+            "bias": {"label": "NEUTRAL / RANGE", "score": -1.8,
+                     "conviction": "normal", "summary": hostile},
+            "gex": {"spot": 763.2, "net_gex": -2.1e9, "regime": "short gamma",
+                    "gamma_flip": 764.52, "call_wall": 775.0, "put_wall": 763.0,
+                    "control_node": 765.0},
+            "levels": {"overnight_high": 766.1, "overnight_low": 761.4,
+                       "prior_day_high": 767.0, "prior_day_low": 760.2},
+            "expected_move": {"dollars": 4.8, "pct": 0.63,
+                              "high": 768.0, "low": 758.4},
+            "brief": hostile,
+        }
+        try:
+            path = logging_obsidian.log_to_obsidian(s)
+            check("export does not raise on non-cp1252 characters", True)
+            with open(path, encoding="utf-8") as f:
+                back = f.read()
+            for name, ch in (("arrow", "→"), ("approx", "≈"),
+                             ("sigma", "σ"), ("em-dash", "—")):
+                check(f"{name} round-trips intact", ch in back)
+        except UnicodeEncodeError as e:
+            check("export does not raise on non-cp1252 characters", False, str(e)[:70])
 
         print()
         if FAILS:
