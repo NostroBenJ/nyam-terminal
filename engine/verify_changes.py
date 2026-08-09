@@ -43,11 +43,14 @@ def snap(**over):
             "gex": g, "bias": {"label": over.get("bias", "NEUTRAL / RANGE")}}
 
 
-def write_capture(date_iso: str, payload: dict):
+def write_capture(date_iso: str, payload: dict, trading_day=None):
     d = os.path.join(_TMP, "capture", date_iso)
     os.makedirs(d, exist_ok=True)
     with open(os.path.join(d, "SPY_snapshot.json"), "w", encoding="utf-8") as f:
         json.dump(payload, f)
+    if trading_day is not None:
+        with open(os.path.join(d, "manifest.json"), "w", encoding="utf-8") as f:
+            json.dump({"trading_day": trading_day, "weekday": "x"}, f)
 
 
 TODAY = dt.date(2026, 8, 10)
@@ -189,6 +192,28 @@ check("and still reports the change",
 os.makedirs(os.path.join(_TMP, "capture", "notadate"), exist_ok=True)
 out = changes.build(snap(put_wall=763.0), "SPY", today=TODAY)
 check("a non-date folder is ignored", out["available"] is True)
+
+print("[12] a forced weekend capture is not treated as 'yesterday'")
+# capture.py refuses a closed day unless forced, but a forced capture still
+# lands in a dated folder and this walk took the newest readable one. Found on
+# the real store: a full Saturday capture sat next to Friday's, so Monday's
+# panel would have diffed against the weekend and labelled it "vs 08-08".
+shutil.rmtree(os.path.join(_TMP, "capture"), ignore_errors=True)
+write_capture("2026-08-07", snap(put_wall=742.0), trading_day=True)   # Friday
+write_capture("2026-08-08", snap(put_wall=742.0), trading_day=False)  # Saturday
+out = changes.build(snap(put_wall=758.0), "SPY", today=dt.date(2026, 8, 10))
+check("the baseline is the Friday session", out["baseline_date"] == "2026-08-07",
+      str(out["baseline_date"]))
+check("not the forced weekend capture", out["baseline_date"] != "2026-08-08")
+check("and the change is still reported",
+      [r for r in out["changes"] if r["key"] == "put_wall"] != [])
+# A capture with no manifest predates the flag and must still be usable, or
+# upgrading would silently empty the panel.
+shutil.rmtree(os.path.join(_TMP, "capture"), ignore_errors=True)
+write_capture("2026-08-07", snap(put_wall=742.0))          # no manifest
+out = changes.build(snap(put_wall=758.0), "SPY", today=dt.date(2026, 8, 10))
+check("a manifest-less capture is still trusted", out["available"] is True,
+      str(out.get("note"))[:60])
 
 print("[11] every row carries the fields the UI reads")
 for r in out["changes"]:

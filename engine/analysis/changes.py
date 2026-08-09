@@ -42,6 +42,22 @@ def _capture_root() -> str:
     return os.path.join(config.STORE_DIR, CAPTURE_DIRNAME)
 
 
+def _was_trading_day(root: str, name: str) -> bool:
+    """
+    Whether a capture folder was written on a session.
+
+    The manifest is the authority because it records what the recorder decided
+    at the time. A folder with no manifest predates the flag, so it is trusted
+    rather than discarded — refusing every old capture would silently empty the
+    panel for anyone upgrading.
+    """
+    try:
+        with open(os.path.join(root, name, "manifest.json"), encoding="utf-8") as f:
+            return json.load(f).get("trading_day", True) is not False
+    except (OSError, ValueError, AttributeError):
+        return True
+
+
 def prior_capture(ticker: str, before: dt.date = None) -> tuple:
     """
     The newest captured snapshot STRICTLY BEFORE `before`, as (date, snapshot).
@@ -50,6 +66,14 @@ def prior_capture(ticker: str, before: dt.date = None) -> tuple:
     for today — diffing this morning against this morning reports nothing moved
     and looks like the panel is broken rather than like there is no comparison
     to make.
+
+    NON-TRADING DAYS ARE SKIPPED. capture.py refuses to run on a closed day
+    unless forced, but a forced capture still lands in a dated folder and this
+    walk took the newest one it could read. A Saturday capture holds Friday's
+    numbers, so the arithmetic survives — but it is labelled "vs 2026-08-08"
+    on a Monday, and worse, it is a snapshot of whatever the engine happened to
+    be holding at the weekend rather than of the session close. "Yesterday"
+    has to mean the previous SESSION.
     """
     before = before or config.today()
     root = _capture_root()
@@ -64,6 +88,8 @@ def prior_capture(ticker: str, before: dt.date = None) -> tuple:
         except ValueError:
             continue
         if d >= before:
+            continue
+        if not _was_trading_day(root, name):
             continue
         path = os.path.join(root, name, f"{ticker.upper()}_snapshot.json")
         try:
