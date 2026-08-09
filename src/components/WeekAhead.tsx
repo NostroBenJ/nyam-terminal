@@ -84,6 +84,17 @@ export function WeekAhead() {
         </div>
       )}
 
+      {/* The week is over and the source has no next-week feed. Without this
+          the panel is a wall of past releases with no headline, which reads
+          exactly like a broken fetch — and this is the normal state all
+          weekend, when next week actually gets planned. */}
+      {cal.spent && !cal.stale && (
+        <div className="week__stale">
+          This week's calendar is complete — every release has printed. Next
+          week's schedule publishes when the week turns.
+        </div>
+      )}
+
       {cal.headline && (
         <div className="week__next">
           <span className="week__nextlabel">NEXT HIGH-IMPACT</span>

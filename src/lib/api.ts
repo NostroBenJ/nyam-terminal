@@ -483,6 +483,15 @@ export interface Calendar {
   /** True when the upstream failed and this is the last good calendar. */
   stale?: boolean;
   age_s?: number;
+  /**
+   * Every event in the week is already past — the normal state from Friday
+   * evening onward, since Forex Factory's file does not roll over until the
+   * week turns and publishes no next-week feed. NOT optional: the engine sets
+   * it on every payload including the cached and failed paths. Typing it `?`
+   * would let a missing field read as `false`, which is the same class of lie
+   * as the `dir_hit_rate: number` that hid a null and blanked the screen.
+   */
+  spent: boolean;
 }
 
 export interface Health {

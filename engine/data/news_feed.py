@@ -56,8 +56,13 @@ FEEDS = [
      "tier": "primary", "url": "https://www.ecb.europa.eu/rss/press.html"},
 
     # --- market press ------------------------------------------------------
-    {"id": "cnbc-markets", "name": "CNBC Markets", "category": "markets",
-     "tier": "market", "url": "https://www.cnbc.com/id/20910258/device/rss/rss.html"},
+    # These two carried the SAME url, so "CNBC Markets" and "CNBC Economy" were
+    # one feed fetched twice: every headline appeared on the rail in duplicate,
+    # half of it filed under the wrong category. Checked against the live feed
+    # rather than assumed — id 20910258 returns channel title "Economy", so it
+    # was the MARKETS entry that was mislabelled, not the econ one.
+    {"id": "cnbc-markets", "name": "CNBC Market Insider", "category": "markets",
+     "tier": "market", "url": "https://www.cnbc.com/id/20409666/device/rss/rss.html"},
     {"id": "cnbc-econ", "name": "CNBC Economy", "category": "econ-data",
      "tier": "market", "url": "https://www.cnbc.com/id/20910258/device/rss/rss.html"},
     {"id": "mw-realtime", "name": "MarketWatch Realtime", "category": "markets",
@@ -103,6 +108,16 @@ MACRO_TERMS = [
 _TAG_RE = re.compile(r"<[^>]+>")
 _WS_RE = re.compile(r"\s+")
 
+# RFC 822 zone abbreviations, mapped to the offsets strptime's %z can read.
+# US zones are the ones these publishers actually emit; the military single
+# letters in the spec are obsolete and famously ambiguous, so they are omitted
+# rather than guessed at.
+_NAMED_ZONES = {
+    "GMT": "+0000", "UTC": "+0000", "UT": "+0000", "Z": "+0000",
+    "EST": "-0500", "EDT": "-0400", "CST": "-0600", "CDT": "-0500",
+    "MST": "-0700", "MDT": "-0600", "PST": "-0800", "PDT": "-0700",
+}
+
 # RSS and Atom name the same concepts differently, and Atom is namespaced.
 _NS = {"atom": "http://www.w3.org/2005/Atom",
        "dc": "http://purl.org/dc/elements/1.1/"}
@@ -128,6 +143,17 @@ def _parse_date(raw: str | None) -> int | None:
     if not raw:
         return None
     raw = raw.strip()
+    # RFC 822 permits named US zones ("EST", "EDT"), and strptime's %Z will not
+    # parse them — such items came back with published=None and took _rank's
+    # undated penalty despite carrying a perfectly good timestamp. Rewriting
+    # the name to its offset is safer than %Z, which parses GMT/UTC to a NAIVE
+    # datetime that the code below then stamps as UTC: correct for GMT, and
+    # silently 5 hours wrong for anything else it happened to accept.
+    for name, offset in _NAMED_ZONES.items():
+        if raw.endswith(" " + name):
+            raw = raw[: -len(name)] + offset
+            break
+
     # RFC 822 (RSS) — "Fri, 01 Aug 2026 13:45:00 GMT" and friends.
     for fmt in ("%a, %d %b %Y %H:%M:%S %z", "%a, %d %b %Y %H:%M:%S %Z",
                 "%d %b %Y %H:%M:%S %z", "%a, %d %b %Y %H:%M %z"):

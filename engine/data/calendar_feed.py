@@ -22,6 +22,13 @@ import urllib.request
 import config
 
 FF_URL = "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
+#: There is NO next-week feed. ff_calendar_nextweek.json returns 404 (checked
+#: 2026-08-08, against a control fetch of thisweek in the same minute that
+#: returned 429 rather than 404 — so the path is absent, not rate-limited).
+#: This matters because "this week" does not roll over until the week turns:
+#: from Friday evening through the weekend every event in the file is already
+#: past, which is exactly when weekend prep happens. That cannot be fixed from
+#: this source, so `spent` below makes the state legible instead of blank.
 USER_AGENT = "NYAM-Terminal/0.1 (personal research tool)"
 TIMEOUT = 10
 
@@ -62,6 +69,20 @@ def _parse_dt(raw: str) -> dt.datetime | None:
     return d.astimezone(config.TZ)
 
 
+def _fetch_week(url: str) -> tuple[list, str | None]:
+    """Raw rows from one Forex Factory weekly file."""
+    try:
+        raw = _get(url)
+    except urllib.error.HTTPError as e:
+        return [], f"HTTP {e.code}"
+    except Exception as e:
+        return [], f"{type(e).__name__}: {e}"
+    try:
+        return json.loads(raw.decode("utf-8", errors="replace")), None
+    except json.JSONDecodeError as e:
+        return [], f"malformed JSON: {e}"
+
+
 def econ_week(countries=DEFAULT_COUNTRIES) -> tuple[list, str | None]:
     """
     Scheduled macro events for the current week, in ET.
@@ -69,17 +90,9 @@ def econ_week(countries=DEFAULT_COUNTRIES) -> tuple[list, str | None]:
     Returns (events, error). An error returns an empty list rather than raising
     — a missing calendar should grey out a panel, not take down the board.
     """
-    try:
-        raw = _get(FF_URL)
-    except urllib.error.HTTPError as e:
-        return [], f"HTTP {e.code}"
-    except Exception as e:
-        return [], f"{type(e).__name__}: {e}"
-
-    try:
-        rows = json.loads(raw.decode("utf-8", errors="replace"))
-    except json.JSONDecodeError as e:
-        return [], f"malformed JSON: {e}"
+    rows, err = _fetch_week(FF_URL)
+    if err:
+        return [], err
 
     out = []
     for r in rows:
@@ -233,9 +246,22 @@ def week_ahead(tickers=None, countries=DEFAULT_COUNTRIES,
             for d in sorted(by_day)]
 
     # The next high-impact event still ahead of us.
-    upcoming = [e for e in events
-                if e["rank"] >= 3 and (e.get("at") or e["date"]) >= now.isoformat()[:len(e.get("at") or e["date"])]]
-    upcoming.sort(key=lambda e: (e.get("at") or e["date"]))
+    #
+    # This compared ISO strings sliced to each other's length, which happened
+    # to work and was impossible to check by reading. Real datetimes cost
+    # nothing here and the comparison is now obviously the one intended.
+    # Earnings rows carry a date but no time; they count as upcoming for the
+    # whole of their day, since an unknown time on the right day is not past.
+    def _when(e) -> dt.datetime:
+        if e.get("at"):
+            parsed = _parse_dt(e["at"])
+            if parsed is not None:
+                return parsed
+        return dt.datetime.fromisoformat(e["date"]).replace(
+            hour=23, minute=59, tzinfo=config.TZ)
+
+    upcoming = sorted((e for e in events if e["rank"] >= 3 and _when(e) >= now),
+                      key=_when)
     headline = upcoming[0] if upcoming else None
 
     errors = {}
@@ -252,6 +278,12 @@ def week_ahead(tickers=None, countries=DEFAULT_COUNTRIES,
         "upcoming_earnings": sorted(earn, key=lambda e: e["date"]),
         "counts": {"econ": len(econ), "earnings_this_week": len(earn_this_week),
                    "earnings_upcoming": len(earn), "total": len(events)},
+        # Every event in the file is already behind us. The source has no
+        # next-week feed, so this is a real state and not a fetch failure —
+        # and without saying so, the panel renders identically to "the
+        # calendar is broken". It is the normal state all weekend, which is
+        # when Monday gets planned.
+        "spent": bool(events) and not any(_when(e) >= now for e in events),
         "errors": errors,
         "fetched_at": int(now.timestamp()),
         "source": "Forex Factory + Yahoo earnings",
@@ -266,7 +298,8 @@ def week_ahead(tickers=None, countries=DEFAULT_COUNTRIES,
 if __name__ == "__main__":                            # manual probe
     w = week_ahead()
     print(f"{w['counts']['total']} events ({w['counts']['econ']} econ, "
-          f"{w['counts']['earnings']} earnings)")
+          f"{w['counts']['earnings_this_week']} earnings this week, "
+          f"{w['counts']['earnings_upcoming']} upcoming)")
     if w["errors"]:
         print("errors:", w["errors"])
     if w["headline"]:

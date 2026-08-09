@@ -96,6 +96,23 @@ def main():
     # least-known item sort as the freshest thing on the board.
     check("undated stays None", items[2]["published"] is None,
           str(items[2]["published"]))
+    # RFC 822 permits named US zones and strptime's %Z will not parse them, so
+    # these came back undated and took the undated rank penalty while carrying
+    # a perfectly good timestamp. Offsets computed by hand: 13:45 EDT is 17:45
+    # UTC, 13:45 EST is 18:45 UTC.
+    base = nf._parse_date("Fri, 07 Aug 2026 13:45:00 +0000")
+    check("EDT parses to its offset",
+          nf._parse_date("Fri, 07 Aug 2026 13:45:00 EDT") == base + 4 * 3600,
+          str(nf._parse_date("Fri, 07 Aug 2026 13:45:00 EDT")))
+    check("EST parses to its offset",
+          nf._parse_date("Fri, 07 Aug 2026 13:45:00 EST") == base + 5 * 3600)
+    check("PST parses to its offset",
+          nf._parse_date("Fri, 07 Aug 2026 13:45:00 PST") == base + 8 * 3600)
+    check("GMT is unchanged by the rewrite",
+          nf._parse_date("Fri, 07 Aug 2026 13:45:00 GMT") == base)
+    check("an unknown zone still yields None, not a wrong time",
+          nf._parse_date("Fri, 07 Aug 2026 13:45:00 XYZ") is None,
+          str(nf._parse_date("Fri, 07 Aug 2026 13:45:00 XYZ")))
 
     print("[5] date ordering puts undated last, not first")
     scored = [nf.score_item(dict(i), "SPY") for i in items]
@@ -176,6 +193,20 @@ def main():
     check("all urls are https", all(f["url"].startswith("https://")
                                     for f in nf.FEEDS),
           str([f["id"] for f in nf.FEEDS if not f["url"].startswith("https://")]))
+    # Unique IDS were checked; unique URLS were not, and that is the gap this
+    # missed: cnbc-markets and cnbc-econ shipped pointing at one CNBC feed, so
+    # every headline landed on the rail twice, half of it under the wrong
+    # category, and both entries looked healthy in the source-status banner.
+    urls = {}
+    for f in nf.FEEDS:
+        urls.setdefault(f["url"], []).append(f["id"])
+    shared = {u: i for u, i in urls.items() if len(i) > 1}
+    check("no two feeds share a url", not shared, str(shared))
+    # Two sources may legitimately cover one category, but two entries with the
+    # same name are a copy-paste artefact.
+    names = [f["name"] for f in nf.FEEDS]
+    check("unique display names", len(names) == len(set(names)),
+          str([n for n in names if names.count(n) > 1]))
 
     print()
     if FAILS:
