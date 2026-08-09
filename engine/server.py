@@ -128,6 +128,22 @@ def _start_brief(ticker: str, snap: dict):
             meta = generate_brief_meta(
                 snap["bias"], snap["gex"], snap["levels"], snap["smt"],
                 snap["news"], ticker)
+            # COPY-ON-WRITE, not in-place mutation.
+            #
+            # Readers take the lock, read the reference, release, and then hand
+            # the dict to FastAPI to serialise — so the lock is not held at the
+            # moment that matters. Patching keys into that same object meant a
+            # response could be serialised BETWEEN the two assignments below and
+            # go out with the prose present but brief_meta still saying
+            # "pending". Building a new dict and swapping the reference means a
+            # reader either sees the old snapshot or the new one, entirely.
+            #
+            # (A crash from mutating during json.dumps was the suspicion that
+            # started this; it did not reproduce across ~8,000 concurrent
+            # serialisations, because CPython's C encoder holds the GIL for the
+            # whole encode. The torn-read above is the real defect, and it is
+            # cheap to remove either way.)
+            to_save = None
             with _lock:
                 cur = _latest.get(ticker)
                 # Only patch if the cached snapshot is still the one this brief
@@ -135,15 +151,25 @@ def _start_brief(ticker: str, snap: dict):
                 # levels, and prose describing the old ones would read as
                 # current commentary on numbers that have moved.
                 if cur is not None and cur.get("generated_at") == snap.get("generated_at"):
-                    cur["brief"] = meta["text"]
-                    cur["brief_meta"] = {k: v for k, v in meta.items() if k != "text"}
-                    snapshot_store.save(ticker, cur)
+                    patched = dict(cur)
+                    patched["brief"] = meta["text"]
+                    patched["brief_meta"] = {k: v for k, v in meta.items()
+                                             if k != "text"}
+                    _latest[ticker] = patched
+                    to_save = patched
+            # Disk I/O OUTSIDE the lock. snapshot_store.save fsyncs, and holding
+            # the global lock across an fsync stalls every API request for its
+            # duration — on a board that polls every 60s and is read on demand.
+            if to_save is not None:
+                snapshot_store.save(ticker, to_save)
         except Exception as e:                       # noqa: BLE001
             with _lock:
                 cur = _latest.get(ticker)
                 if cur is not None:
-                    cur["brief_meta"] = dict(cur.get("brief_meta") or {},
-                                             source="error", error=str(e))
+                    # Same copy-on-write rule as the success path.
+                    _latest[ticker] = dict(
+                        cur, brief_meta=dict(cur.get("brief_meta") or {},
+                                             source="error", error=str(e)))
             print(f"[warn] brief failed for {ticker}: {type(e).__name__}: {e}",
                   file=sys.stderr, flush=True)
         finally:
