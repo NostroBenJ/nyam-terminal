@@ -46,12 +46,25 @@ def build_bias(gex: dict, levels: dict, smt: dict, news: dict, em: dict = None,
     spot = gex["spot"]
 
     # 1) GEX regime ----------------------------------------------------------
+    # The parenthetical DESCRIBES where spot sits; it does not assert it. The
+    # regime is the sign of net gamma at spot (gex.py derives it that way on
+    # purpose), and the flip is a separate, bisected level. They usually agree
+    # — but "usually" is not "always", and this text used to state "spot 763
+    # above flip 770" whenever they diverged, printing a false statement of
+    # fact as the reason for the highest-weighted signal on the board. It also
+    # printed the word None when no flip could be computed.
+    _flip = gex.get("gamma_flip")
+    if _flip is None:
+        _where = "no gamma flip in range"
+    else:
+        _rel = "above" if spot > _flip else "below" if spot < _flip else "at"
+        _where = f"spot {spot} {_rel} flip {_flip}"
     if gex["regime"] == "positive":
         signals.append({
             "name": "Gamma Regime",
             "lean": 0,
             "weight": WEIGHTS["gex_regime"],
-            "reason": f"Positive gamma (spot {spot} above flip {gex['gamma_flip']}). "
+            "reason": f"Positive gamma ({_where}). "
                       f"Dealers sell rips / buy dips — expect mean-reversion and pinning, not a runaway trend.",
         })
     else:
@@ -59,7 +72,7 @@ def build_bias(gex: dict, levels: dict, smt: dict, news: dict, em: dict = None,
             "name": "Gamma Regime",
             "lean": 0,
             "weight": WEIGHTS["gex_regime"],
-            "reason": f"Negative gamma (spot {spot} below flip {gex['gamma_flip']}). "
+            "reason": f"Negative gamma ({_where}). "
                       f"Dealer hedging amplifies moves — favor momentum/breakout over fading.",
         })
 
@@ -128,10 +141,29 @@ def build_bias(gex: dict, levels: dict, smt: dict, news: dict, em: dict = None,
 
     label, summary = _label(score, gex, conviction)
 
-    scenarios = [
-        f"If price reclaims and holds above {gex['gamma_flip']}, the positive-gamma case strengthens — favor fades of pushes toward {cw}.",
-        f"If price loses {gex['put_wall']}, dealer hedging flips to amplifying — favor downside continuation, not bottom-picking.",
-    ]
+    # A scenario is only written for a level that EXISTS. gex.py nulls a wall
+    # whose sign is wrong and returns no flip when none is in range, so None is
+    # a designed outcome — and this was unguarded interpolation, which printed
+    # "If price loses None" and "favor fades of pushes toward None". plan.py
+    # already guards every row this way; the scenarios did not, and they are
+    # the lines actually read at the open.
+    scenarios = []
+    if _flip is not None:
+        toward = f" — favor fades of pushes toward {cw}." if cw else "."
+        scenarios.append(
+            f"If price reclaims and holds above {_flip}, the positive-gamma "
+            f"case strengthens{toward}")
+    if pw:
+        scenarios.append(
+            f"If price loses {pw}, dealer hedging flips to amplifying — favor "
+            f"downside continuation, not bottom-picking.")
+    if not scenarios:
+        # Say why there is nothing rather than rendering an empty list, which
+        # is indistinguishable from a panel that failed to load.
+        scenarios.append(
+            "No gamma flip or put wall in range today, so there is no "
+            "structural level to frame a scenario around — trade the session "
+            "levels instead.")
 
     return {
         "label": label,

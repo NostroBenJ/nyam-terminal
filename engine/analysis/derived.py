@@ -78,27 +78,53 @@ def build_level_map(gex: dict) -> list:
     flip, mag = gex["gamma_flip"], gex["control_node"]
     neg = gex["regime"] == "negative"
 
+    # `rank` is explicit priority, low = most decision-relevant. It used to be
+    # implicit in insertion order, and the dedupe below sorted by PRICE first —
+    # so ties resolved by whichever row happened to be added earlier, not by
+    # importance. When the flip landed on the magnet or on spot, the
+    # "Gamma Flip / REGIME LINE" row was silently dropped, which is the one
+    # moment it matters most: price sitting on the line the regime turns at.
     rows = []
     if cw:
-        rows.append({"price": cw, "role": "Call Wall / Ceiling", "tag": "FADE / EXIT", "cls": "down"})
-    if mag and mag not in (cw, pw):
-        rows.append({"price": mag, "role": "Control Node / Magnet", "tag": "PIN", "cls": "mag"})
-    rows.append({"price": spot, "role": "Spot — Current", "tag": "WATCH", "cls": "watch"})
+        rows.append({"price": cw, "role": "Call Wall / Ceiling", "tag": "FADE / EXIT",
+                     "cls": "down", "rank": 1})
+    if mag:
+        rows.append({"price": mag, "role": "Control Node / Magnet", "tag": "PIN",
+                     "cls": "mag", "rank": 2})
+    rows.append({"price": spot, "role": "Spot — Current", "tag": "WATCH",
+                 "cls": "watch", "rank": 3})
     if flip:
-        rows.append({"price": flip, "role": "Gamma Flip", "tag": "REGIME LINE", "cls": "flip"})
+        rows.append({"price": flip, "role": "Gamma Flip", "tag": "REGIME LINE",
+                     "cls": "flip", "rank": 0})
     if pw:
         tag = "ACCEL / PUTS ONLY" if neg else "FLOOR / BUY DIPS"
         cls = "down" if neg else "up"
-        rows.append({"price": pw, "role": "Put Wall / Floor", "tag": tag, "cls": cls})
+        rows.append({"price": pw, "role": "Put Wall / Floor", "tag": tag,
+                     "cls": cls, "rank": 1})
 
-    # dedupe by price, keep highest-priority role (first wins), sort high->low
-    seen, deduped = set(), []
-    for r in sorted(rows, key=lambda r: -r["price"]):
-        if r["price"] in seen:
-            continue
-        seen.add(r["price"])
-        deduped.append(r)
-    return deduped
+    # Coincident levels are MERGED, not discarded. Two things pointing at one
+    # price is confluence — the highest-conviction reaction point there is, and
+    # the whole reason levels.find_confluences exists — so throwing one away
+    # loses exactly the information worth having. The surviving tag and colour
+    # come from the highest-priority member; every role is named.
+    by_price: dict = {}
+    for r in rows:
+        by_price.setdefault(r["price"], []).append(r)
+
+    merged = []
+    for price, group in by_price.items():
+        group.sort(key=lambda r: r["rank"])
+        lead = group[0]
+        roles = list(dict.fromkeys(r["role"] for r in group))
+        merged.append({
+            "price": price,
+            "role": " + ".join(roles),
+            "tag": lead["tag"],
+            "cls": lead["cls"],
+            "confluence": len(roles) > 1,
+        })
+    merged.sort(key=lambda r: -r["price"])
+    return merged
 
 
 def neg_gamma_zone(gex: dict) -> dict | None:

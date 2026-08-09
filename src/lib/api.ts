@@ -59,9 +59,17 @@ export interface Bias {
 
 export interface LevelMapRow {
   price: number;
+  /** One or more roles joined with " + " when levels land on the same price. */
   role: string;
   tag: string;
   cls: "up" | "down" | "flip" | "watch" | string;
+  /**
+   * Two or more levels share this price. Not optional — the engine sets it on
+   * every row. Confluence is the highest-conviction reaction point on the
+   * board, so it is worth marking rather than leaving the reader to notice
+   * that a role string happens to contain a plus sign.
+   */
+  confluence: boolean;
 }
 
 export interface ExpectedMove {

@@ -82,14 +82,22 @@ def _row(key, label, before, after, *, rank, kind="level", note=None,
          spot=None):
     """One reported change. `rank` is decision impact, not magnitude."""
     known = before is not None and after is not None
-    move = (after - before) if known and isinstance(before, (int, float)) else None
+    # BOTH numeric fields need the isinstance guard, not just `move`. The
+    # regime row and the call row carry STRINGS ("positive"/"negative",
+    # "SHORT LEAN"), and `pct` was computed without the check — so a subtraction
+    # of two strings raised TypeError and took the whole panel down. It failed
+    # on exactly the two rows that matter most: the regime flip leads this list
+    # by design, and a changed call is the thing you came to read.
+    numeric = known and isinstance(before, (int, float)) and \
+        isinstance(after, (int, float))
+    move = (after - before) if numeric else None
     return {
         "key": key,
         "label": label,
         "before": before,
         "after": after,
         "move": round(move, 2) if move is not None else None,
-        "pct": round(_pct(before, after), 2) if known and before else None,
+        "pct": round(_pct(before, after), 2) if numeric and before else None,
         # As a share of spot — the only scale on which "the wall moved 5" is
         # comparable between SPY at 770 and a stock at 40.
         "of_spot": (round(abs(move) / spot * 100, 2)
@@ -154,7 +162,16 @@ def build(current: dict, ticker: str = None, today: dt.date = None) -> dict:
             rows.append(_row(key, label, b, c, rank=rank,
                              note="Present on only one side — not a move."))
             continue
-        if spot and abs(c - b) / spot * 100 >= LEVEL_EPS:
+        # Without a spot there is no scale to judge "material" against — but
+        # skipping the comparison silently would report "nothing moved" for a
+        # level that moved sixteen points, which is the invented-certainty this
+        # module exists to avoid. Fall back to an absolute threshold and let
+        # `of_spot` be null rather than dropping the row.
+        if spot:
+            material = abs(c - b) / spot * 100 >= LEVEL_EPS
+        else:
+            material = c != b
+        if material:
             rows.append(_row(key, label, b, c, rank=rank, spot=spot))
 
     # 3. POSITIONING SIZE.

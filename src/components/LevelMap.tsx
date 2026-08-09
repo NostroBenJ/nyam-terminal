@@ -20,7 +20,14 @@ export function LevelMap({ rows, spot }: { rows: LevelMapRow[]; spot: number }) 
           return (
             <tr key={`${r.price}-${r.role}`} className={isSpot ? "levels__row--spot" : undefined}>
               <td className={`levels__price num levels__price--${r.cls}`}>{price(r.price)}</td>
-              <td className="levels__role">{r.role}</td>
+              {/* Two levels on one price is the highest-conviction reaction
+                  point on the board. The engine used to resolve the tie by
+                  dropping a row, which lost the flip whenever it landed on
+                  the magnet or on spot. */}
+              <td className="levels__role">
+                {r.role}
+                {r.confluence && <span className="chip chip--warn">confluence</span>}
+              </td>
               <td className={`levels__tag levels__tag--${r.cls}`}>{r.tag}</td>
               <td className="levels__dist num">
                 {isSpot ? "—" : `${dist > 0 ? "+" : "−"}${Math.abs(dist).toFixed(2)}%`}
