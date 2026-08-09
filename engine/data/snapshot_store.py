@@ -43,7 +43,12 @@ DIRNAME = "snapshots"
 #: Refusing to restore across versions costs exactly one slow cold start after
 #: an upgrade and removes the whole class of "it works after a refresh" bugs.
 #: This is the same guard MIX_VERSION gives the track record.
-SCHEMA_VERSION = 2
+#: 3 — level_map rows gained `confluence` and merged rows switched to short
+#:     role names. Caught by forgetting to bump it on the very next commit: the
+#:     deployed engine restored a board carrying the LONG merged role, which is
+#:     the wrapping row the short names were introduced to fix. The guard works;
+#:     it just cannot read your mind.
+SCHEMA_VERSION = 3
 
 
 def _dir() -> str:
