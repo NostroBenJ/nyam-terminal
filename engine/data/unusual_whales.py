@@ -119,6 +119,34 @@ def budget() -> dict:
     }
 
 
+#: Requests held back for the things you ask for BY HAND. Once the scheduled
+#: refresh has spent everything else, a manual Refresh, a ticker switch and the
+#: end-of-day capture still work. One full board build is ~55 requests, so this
+#: is roughly twenty of them.
+RESERVE = 1200
+
+
+def budget_exhausted() -> bool:
+    """
+    True when only the reserve is left, so AUTOMATIC work should stand down.
+
+    The budget was counted and displayed from the start but never ENFORCED —
+    nothing consulted it before spending. That was survivable while auto-
+    refresh stopped at 12:59; running to the close spends around 23k of 30k on
+    one ticker, and a second warm ticker or a busy day of manual refreshes puts
+    the cap in reach during the afternoon.
+
+    Hitting it is not a soft landing: the requests simply start failing, and
+    they fail in the last hour of the session rather than politely overnight.
+    Standing the scheduler down leaves a board that is stale and SAYS it is
+    stale, which is strictly better than one that is broken.
+    """
+    try:
+        return budget()["remaining"] <= RESERVE
+    except Exception:                                 # noqa: BLE001
+        return False        # a counter problem must never stop a refresh
+
+
 class UWError(RuntimeError):
     """Any failure talking to Unusual Whales. Carries the HTTP status if known."""
 

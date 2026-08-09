@@ -16,6 +16,7 @@ Why this exists: it's the difference between "I think the bias works" and
 panel shows sample size on purpose. Don't trust a hot streak of 6.
 """
 import datetime as dt
+import math
 import random
 import sys
 
@@ -132,6 +133,12 @@ def journal(ticker: str = None, limit: int = 120) -> list:
     return vals[:limit]
 
 
+def _price(v) -> bool:
+    """A usable price: a real number, strictly positive, finite."""
+    return isinstance(v, (int, float)) and not isinstance(v, bool) \
+        and math.isfinite(v) and v > 0
+
+
 def grade_record(rec: dict, ohlc: dict, band: float = None) -> dict | None:
     """
     Grade one call over the window actually traded (open -> GRADE_EXIT_TIME).
@@ -144,7 +151,18 @@ def grade_record(rec: dict, ohlc: dict, band: float = None) -> dict | None:
     band = config.grade_band_for(ticker) if band is None else band
     o = ohlc.get("open")
     c = ohlc.get("exit", ohlc.get("close"))   # tolerate the old key
-    if not o or c is None:
+    # BOTH prices must be real and positive. The guard used to read
+    # `not o or c is None`, which caught a zero OPEN but not a zero EXIT — so a
+    # feed returning 0 for the close graded SPY as a -100% move, called it
+    # "down", and marked a SHORT LEAN correct. A fabricated WIN, written
+    # permanently into the one dataset that cannot be rebuilt, and one that
+    # flatters the system rather than embarrassing it, which is the direction
+    # you are least likely to go looking.
+    #
+    # NaN is refused for the same reason it is dangerous: every comparison
+    # against it is False, so it would slip through as "flat" rather than as
+    # an error.
+    if not _price(o) or not _price(c):
         return None
     move_pct = 100 * (c - o) / o
     actual = "up" if move_pct > band else "down" if move_pct < -band else "flat"
@@ -181,18 +199,25 @@ def grade_pending(get_ohlc) -> dict:
     for rec in recs.values():
         date = rec["date"]
         if rec.get("outcome") is None and date < today:
+            # The guard has to cover the GRADING too, not just the fetch. It
+            # wrapped only get_ohlc, so anything raised while grading — a
+            # record missing predicted_dir, a price arriving as a string from
+            # an upstream that serialises numerics that way — propagated out
+            # of a function whose whole contract is that one bad record cannot
+            # take anything down. This runs at engine startup, so the cost of
+            # that was the board not appearing at all.
             try:
                 ohlc = get_ohlc(rec["ticker"], date)
+                if ohlc:
+                    graded = grade_record(rec, ohlc)
+                    if graded:
+                        rec["outcome"] = graded
+                        changed = True
             except Exception as e:                      # noqa: BLE001
                 failed += 1
                 print(f"[warn] grading {rec['ticker']} {date} failed: "
                       f"{type(e).__name__}: {e}", file=sys.stderr, flush=True)
                 continue
-            if ohlc:
-                graded = grade_record(rec, ohlc)
-                if graded:
-                    rec["outcome"] = graded
-                    changed = True
     if changed:
         store.save(recs)
     if failed:

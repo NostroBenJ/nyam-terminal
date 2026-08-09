@@ -131,6 +131,71 @@ check("stats unchanged by a no-op grading pass",
       (before["n"], before["wins"]) == (after["n"], after["wins"]),
       f"{before['n']}/{before['wins']} vs {after['n']}/{after['wins']}")
 
+print("[6] a bad price is refused, never graded")
+# The guard read `not o or c is None`, which caught a zero OPEN but not a zero
+# EXIT. A feed returning 0 for the close graded SPY as a -100% move, called it
+# "down", and marked a SHORT LEAN CORRECT — a fabricated win, written
+# permanently into the one dataset that cannot be rebuilt, and flattering
+# rather than embarrassing, which is the direction nobody audits.
+#
+# Pure arithmetic on a dict; touches no store.
+_rec = {"ticker": "SPY", "date": "2026-08-07", "predicted_dir": "down",
+        "bias": "SHORT LEAN", "score": -2.5}
+for label, ohlc in (
+        ("zero exit", {"open": 771.02, "exit": 0.0}),
+        ("negative exit", {"open": 771.02, "exit": -5.0}),
+        ("NaN exit", {"open": 771.02, "exit": float("nan")}),
+        ("infinite exit", {"open": 771.02, "exit": float("inf")}),
+        ("boolean exit", {"open": 771.02, "exit": True}),
+        # Unusual Whales serialises numerics as strings in places; one leaking
+        # this far used to raise straight out of grade_pending.
+        ("string exit", {"open": 771.02, "exit": "773.03"}),
+        ("zero open", {"open": 0.0, "exit": 773.03}),
+        ("missing exit", {"open": 771.02}),
+):
+    check(f"{label} is refused", tracker.grade_record(_rec, ohlc) is None,
+          str(tracker.grade_record(_rec, ohlc)))
+
+_good = tracker.grade_record(_rec, {"open": 771.02, "exit": 773.03})
+check("a real pair still grades", _good is not None)
+check("and the arithmetic is right", _good and _good["move_pct"] == 0.26,
+      str(_good and _good["move_pct"]))
+check("a short call on an up move is a miss", _good and _good["correct"] is False)
+
+print("[7] grade_pending survives a record that cannot be graded")
+# The try/except wrapped only get_ohlc, so anything raised while GRADING
+# propagated out of a function whose contract is that one bad record takes
+# nothing down — and it runs at engine startup, so the cost was no board.
+#
+# SANDBOXED. Unlike the checks above, this one writes, and this suite runs
+# against the real records.json — the only irreplaceable file in the app.
+import json as _json                                             # noqa: E402
+import shutil as _shutil                                         # noqa: E402
+import tempfile as _tempfile                                     # noqa: E402
+
+_real_dir = config.STORE_DIR
+_sandbox = _tempfile.mkdtemp(prefix="verify_grading_")
+config.STORE_DIR = _sandbox
+try:
+    with open(tracker.store._path(), "w", encoding="utf-8") as f:
+        _json.dump({"SPY|1999-01-04": {
+            "date": "1999-01-04", "ticker": "SPY", "bias": "SHORT LEAN",
+            "score": -2.5, "spot": 100.0, "outcome": None,
+        }}, f)                        # no predicted_dir -> raises in grading
+    try:
+        tracker.grade_pending(lambda t, d: {"open": 100.0, "exit": 101.0})
+        check("a record that raises while grading does not propagate", True)
+    except Exception as e:                              # noqa: BLE001
+        check("a record that raises while grading does not propagate", False,
+              f"{type(e).__name__}: {e}")
+    _back = tracker.store.load()
+    check("and it stays pending rather than half-written",
+          _back.get("SPY|1999-01-04", {}).get("outcome") is None,
+          str(_back.get("SPY|1999-01-04", {}).get("outcome")))
+finally:
+    config.STORE_DIR = _real_dir
+    _shutil.rmtree(_sandbox, ignore_errors=True)
+
 print()
 if _fail:
     print(f"{_fail} check(s) FAILED")

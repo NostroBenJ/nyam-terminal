@@ -1132,8 +1132,12 @@ code {
 .levels__price { font-weight: 500; width: 1%; white-space: nowrap; }
 .levels__price--up    { color: var(--up); }
 .levels__price--down  { color: var(--down); }
-.levels__price--flip  { color: var(--accent); }
-.levels__price--watch { color: var(--text); }
+/* Rule 1: copper marks where price is NOW. That is the spot row, not the
+   flip. This had them the other way round — the regime line wore the needle
+   colour while the live reading was plain text, which is precisely the drift
+   rule 1 exists to stop. The flip is structure, so it takes --neutral. */
+.levels__price--flip  { color: var(--neutral); }
+.levels__price--watch { color: var(--accent); }
 
 .levels__role { color: var(--muted); font-size: 11px; }
 /* Two levels landing on one price. The chip sat flush against the role text,
@@ -1171,8 +1175,8 @@ code {
 }
 .levels__tag--up    { color: var(--up); }
 .levels__tag--down  { color: var(--down); }
-.levels__tag--flip  { color: var(--accent); }
-.levels__tag--watch { color: var(--muted); }
+.levels__tag--flip  { color: var(--neutral); }
+.levels__tag--watch { color: var(--accent); }
 .levels__dist { color: var(--muted); font-size: 11px; width: 1%; white-space: nowrap; }
 .levels__row--spot { background: var(--panel-2); }
 

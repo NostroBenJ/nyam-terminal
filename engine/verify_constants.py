@@ -127,6 +127,56 @@ check("the rule string carries band AND window",
       and config.GRADE_EXIT_TIME in config.grade_rule_for("SPY"),
       config.grade_rule_for("SPY"))
 
+print("[4] auto-refresh covers the whole session someone is watching")
+# This bug has now been fixed twice. It first stopped at 09:59, covering only
+# pre-market; that was extended to the GRADING window and stopped at 12:59,
+# which left 13:00-16:00 frozen — the same failure, three hours later in the
+# day. The cron spec is `hour=f"{start}-{end}"`, so it fires through end:59.
+_start_h = int(config.PREMARKET_START.split(":")[0])
+_end_h = int(config.SESSION_REFRESH_UNTIL.split(":")[0])
+_open_h, _open_m = map(int, config.MARKET_OPEN.split(":"))
+check("refreshing begins before the open", _start_h < _open_h,
+      f"{config.PREMARKET_START} vs {config.MARKET_OPEN}")
+check("and continues to the closing bell", _end_h >= 16,
+      f"last auto-refresh {_end_h:02d}:59, market closes 16:00")
+check("the window is not tied to the grading exit",
+      config.SESSION_REFRESH_UNTIL != config.GRADE_EXIT_TIME,
+      "moving one would silently move the other")
+
+print("[5] the daily request budget is enforced, not merely displayed")
+# It was counted and shown from the start and consulted by nothing. Survivable
+# while auto-refresh stopped at 12:59; running to the close spends most of the
+# day's allowance on one ticker, and the cap is reached in the AFTERNOON —
+# during the session rather than politely overnight.
+from data import unusual_whales as uw                            # noqa: E402
+check("a reserve is held back for manual work", uw.RESERVE > 0, str(uw.RESERVE))
+check("the reserve covers several full builds by hand", uw.RESERVE >= 55 * 5,
+      f"{uw.RESERVE} vs a ~55-request build")
+
+_real = uw.budget
+try:
+    uw.budget = lambda: {"used": 0, "limit": 30000, "remaining": 30000,
+                         "pct": 0.0, "date": "2026-08-10"}
+    check("a fresh budget does not stand down", uw.budget_exhausted() is False)
+    uw.budget = lambda: {"used": 29000, "limit": 30000,
+                         "remaining": uw.RESERVE - 1, "pct": 96.7,
+                         "date": "2026-08-10"}
+    check("at the reserve, automatic work stands down",
+          uw.budget_exhausted() is True)
+    uw.budget = lambda: {"used": 30000, "limit": 30000, "remaining": 0,
+                         "pct": 100.0, "date": "2026-08-10"}
+    check("and stays stood down at zero", uw.budget_exhausted() is True)
+
+    def _boom():
+        raise RuntimeError("counter file unreadable")
+    uw.budget = _boom
+    # A broken counter must not be able to stop refreshing — that would turn a
+    # bookkeeping fault into a dead board.
+    check("a counter failure never stands the refresh down",
+          uw.budget_exhausted() is False)
+finally:
+    uw.budget = _real
+
 print()
 if _fail:
     print(f"{_fail} check(s) FAILED")

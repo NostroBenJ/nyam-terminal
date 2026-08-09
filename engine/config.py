@@ -191,8 +191,21 @@ REFRESH_SECONDS = 60        # frontend polls /api/bias this often
 # The scheduler used to stop at 09:59 — it only ever covered pre-market. That
 # left the two hours you actually trade (09:30–12:00) with no auto-refresh at
 # all: the board froze on its 10:00 snapshot while the age chip quietly climbed.
-# Auto-refresh now runs through the window the bias is graded over.
-SESSION_REFRESH_UNTIL = "12:00"
+#
+# THEN IT STOPPED AT 12:59 AND THE SAME BUG CAME BACK, three hours later in the
+# day. The window was set to match the GRADING window (open->12:00), but
+# refreshing the board and grading the call are different concerns: grading
+# asks whether the morning read was right, while the board has to stay live for
+# as long as somebody is looking at it. That is now the whole session, so this
+# tracks the CLOSE — and is deliberately NOT derived from GRADE_EXIT_TIME, so
+# that moving one can never silently move the other again.
+#
+# Cost, measured rather than assumed: a refresh with a warm chain is 35 UW
+# requests, and the chain re-walks every CHAIN_REFRESH_SECONDS. 07:00–16:59 at
+# REFRESH_SECONDS works out around 23k of the 30k daily budget for one ticker.
+# That fits, but it is no longer comfortable — hence the guard in
+# unusual_whales.budget_exhausted().
+SESSION_REFRESH_UNTIL = "16:00"
 
 # How often to re-pull the option CHAIN, as opposed to the spot price.
 #

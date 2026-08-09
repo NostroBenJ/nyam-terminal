@@ -180,8 +180,24 @@ def _start_brief(ticker: str, snap: dict):
 
 
 def scheduled_refresh():
-    if _running["on"]:
-        refresh()
+    if not _running["on"]:
+        return
+    # AUTOMATIC work stands down near the cap; anything you ask for by hand
+    # still goes through. Spending the last of the day's budget on a refresh
+    # nobody asked for is how the board ends up broken at 15:30 rather than
+    # merely stale — and stale-and-labelled is a state this app handles well.
+    if config.PROVIDER == "uw":
+        try:
+            from data import unusual_whales as uw
+            if uw.budget_exhausted():
+                b = uw.budget()
+                print(f"[{dt.datetime.now(config.TZ)}] auto-refresh paused — "
+                      f"{b['remaining']} UW requests left of {b['limit']}; "
+                      f"manual refresh still available", flush=True)
+                return
+        except Exception:                             # noqa: BLE001
+            pass          # never let the guard itself stop a refresh
+    refresh()
 
 
 def scheduled_log():
