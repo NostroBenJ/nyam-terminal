@@ -424,6 +424,15 @@ export interface CaptureStatus {
   days: CaptureDay[];
   /** Trading days with no capture at all — permanent holes. */
   missing_trading_days: string[];
+  /**
+   * Non-null means the audit FAILED and the list above is unknown rather than
+   * empty. This used to be swallowed, so a crash in the check rendered as
+   * "no missed days" — a false negative on the one thing the panel exists for,
+   * and unrecoverable by the time you noticed.
+   */
+  missing_error?: string | null;
+  /** Gaps are only counted from the first capture onward. */
+  audited_since?: string | null;
   total_bytes: number;
 }
 

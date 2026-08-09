@@ -97,6 +97,14 @@ KNOWN_NULLABLE = {
     "until_label": "same as minutes_until",
 
     # Caught by this suite on the run that introduced it, which is the point.
+    "missing_error":
+        "null when the missed-days audit ran cleanly. NON-null means the list "
+        "is unknown rather than empty — CaptureStatus renders a warning for "
+        "that case specifically, because a gap reported as no-gap cannot be "
+        "recovered by the time you notice",
+    "audited_since":
+        "null when nothing has been captured yet, so there is no window to "
+        "audit",
     "matrix.rows[].level":
         "null on rows that are not a named level; GexMatrix renders the badge "
         "only behind `r.level &&`, and api.ts declares it `string | null`",

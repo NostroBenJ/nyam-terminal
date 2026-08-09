@@ -275,24 +275,38 @@ def status(limit: int = 30) -> dict:
     # a gap you could have prevented, and an alert that fires on day one is an
     # alert you learn to ignore. The meaningful signal is a day you were
     # recording and still missed — the machine was off, or a run failed.
+    # THE FAILURE IS REPORTED, NOT SWALLOWED. This used to be `except: pass`,
+    # which meant that if day_status or the import raised, `missing` stayed
+    # empty and the Journal rendered "no missed days" — a silent FALSE NEGATIVE
+    # on the single thing this panel exists to warn about. An option chain
+    # cannot be re-fetched for a past date, so a gap reported as no-gap is the
+    # most expensive lie the recorder can tell.
     missing = []
+    missing_error = None
     try:
         from analysis import sessions
         have = {d["date"] for d in days}
         if have:
-            since = min(have)
+            since = dt.date.fromisoformat(min(have))
             cur = dt.date.today()
-            for back in range(1, 40):
+            # Bounded by the FIRST CAPTURE, not by an arbitrary window. The old
+            # `range(1, 40)` silently capped the audit at forty days, so after
+            # three months of recording the earliest gaps became invisible —
+            # the check quietly stopped covering the history it claimed to.
+            span = (cur - since).days
+            for back in range(1, span + 1):
                 d = cur - dt.timedelta(days=back)
-                iso = d.isoformat()
-                if iso < since:
-                    break
-                if sessions.day_status(d)["open"] and iso not in have:
-                    missing.append(iso)
-    except Exception:
-        pass
+                if sessions.day_status(d)["open"] and d.isoformat() not in have:
+                    missing.append(d.isoformat())
+    except Exception as e:                              # noqa: BLE001
+        missing_error = f"{type(e).__name__}: {e}"
 
-    return {"dir": CAPTURE_DIR, "days": days, "missing_trading_days": missing,
+    return {"dir": CAPTURE_DIR, "days": days,
+            "missing_trading_days": sorted(missing, reverse=True),
+            # Non-null means the list above is NOT authoritative. The UI must
+            # say "unknown", never "none".
+            "missing_error": missing_error,
+            "audited_since": min({d["date"] for d in days}) if days else None,
             "total_bytes": sum(d["bytes"] for d in days)}
 
 

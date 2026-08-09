@@ -18,6 +18,66 @@ import config
 from data.mock_data import mock_market
 
 
+def _uw_ohlc_for_grade(ticker: str, date_iso: str) -> dict | None:
+    """
+    The regular session's open and the price at GRADE_EXIT_TIME, from UW.
+
+    Returns None — not a guess — when the day is outside UW's intraday window
+    or has no regular-session bars, so the caller can fall back rather than
+    grade a call against a number that was never traded.
+
+    Only `market_time == "r"` bars count. Pre-market prints would move the
+    "open" to 04:00, which is not the open any of these calls were made about.
+    """
+    from data import unusual_whales as uw
+
+    try:
+        rows = uw.ohlc(ticker, candle_size="5m", limit=1000)
+    except Exception:                                   # noqa: BLE001
+        return None
+    if not rows:
+        return None
+
+    exit_h, exit_m = map(int, config.GRADE_EXIT_TIME.split(":"))
+    want = dt.date.fromisoformat(date_iso)
+    session = []
+    for r in rows:
+        if r.get("market_time") != uw.MT_REGULAR:
+            continue
+        raw = r.get("start_time") or r.get("end_time")
+        if not raw:
+            continue
+        try:
+            t = dt.datetime.fromisoformat(
+                str(raw).replace("Z", "+00:00")).astimezone(config.TZ)
+        except ValueError:
+            continue
+        if t.date() == want:
+            session.append((t, r))
+
+    if not session:
+        return None
+    session.sort(key=lambda x: x[0])
+
+    open_px = uw._f(session[0][1], "open")
+    if open_px <= 0:
+        return None
+
+    # The bar that CONTAINS the exit minute, not the one that starts on it —
+    # a 5m bar stamped 11:55 is the one whose close lands on 12:00.
+    exit_sec = exit_h * 3600 + exit_m * 60
+    at_exit = [(t, r) for t, r in session
+               if t.hour * 3600 + t.minute * 60 + 300 <= exit_sec + 1]
+    if at_exit:
+        return {"open": open_px, "exit": uw._f(at_exit[-1][1], "close"),
+                "note": ""}
+
+    # The session ended before the exit time (half day). Grading on its last
+    # print is correct; grading on a time that never happened is not.
+    return {"open": open_px, "exit": uw._f(session[-1][1], "close"),
+            "note": "[short session]"}
+
+
 def get_ohlc(ticker: str, date_iso: str) -> dict | None:
     """
     Fetch the session's open and the price at GRADE_EXIT_TIME, for grading.
@@ -34,7 +94,39 @@ def get_ohlc(ticker: str, date_iso: str) -> dict | None:
     """
     if config.USE_MOCK_DATA:
         return None
-    import yfinance as yf
+
+    # GRADE ON THE SAME FEED THE CALL WAS MADE ON.
+    #
+    # This was the last yfinance dependency in the app, and it sat in the one
+    # place that matters most: the number that decides whether any of this
+    # works. Two faults, one latent and one live.
+    #
+    # LATENT — yfinance is not in the frozen bundle. Its dependencies came
+    # along via other imports, but the package itself did not, because this
+    # import is inside a function and nothing declared it. Nothing had broken
+    # yet only because every record happened to be graded already; the first
+    # ungraded call would have raised ImportError through grade_pending, which
+    # has no handler, and server.py calls that at STARTUP. The engine would
+    # have failed to boot on the first Tuesday after a Monday call.
+    #
+    # LIVE — a call made at UW's spot and graded against Yahoo's bars can be
+    # marked wrong on a vendor difference rather than on the market. Small, but
+    # it is noise injected into the only measurement that matters.
+    if config.PROVIDER == "uw" and config.UW_API_KEY:
+        got = _uw_ohlc_for_grade(ticker, date_iso)
+        if got is not None:
+            return got
+        # Fall through to Yahoo rather than returning None: a day outside UW's
+        # intraday window is better graded late than never, and the note says
+        # which feed produced it.
+
+    try:
+        import yfinance as yf
+    except ImportError:
+        # Reported through the return contract rather than raised. Grading runs
+        # at engine startup and inside the recorder; an exception here takes
+        # both down over a data source that is now only a fallback.
+        return None
 
     d = dt.date.fromisoformat(date_iso)
     tk = yf.Ticker(ticker)

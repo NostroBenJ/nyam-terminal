@@ -17,6 +17,7 @@ panel shows sample size on purpose. Don't trust a hot streak of 6.
 """
 import datetime as dt
 import random
+import sys
 
 import config
 import store
@@ -156,14 +157,34 @@ def grade_record(rec: dict, ohlc: dict, band: float = None) -> dict | None:
 
 
 def grade_pending(get_ohlc) -> dict:
-    """Grade any past, ungraded predictions. `get_ohlc(ticker, date)` -> ohlc|None."""
+    """
+    Grade any past, ungraded predictions. `get_ohlc(ticker, date)` -> ohlc|None.
+
+    A FAILURE TO GRADE ONE RECORD MUST NOT TAKE ANYTHING DOWN. This is called
+    at engine startup and inside the headless recorder, and it used to let any
+    exception from get_ohlc propagate — so a data-source problem would stop the
+    engine BOOTING rather than leaving one call ungraded. An ungraded call is a
+    gap in a hit rate; a dead engine is no board at all, and the second is a
+    much worse trade for the same fault.
+
+    Ungraded records stay pending and are retried on the next run, which is the
+    correct behaviour: grading is idempotent and the data usually arrives late
+    rather than never.
+    """
     recs = store.load()
     today = dt.date.today().isoformat()
     changed = False
+    failed = 0
     for rec in recs.values():
         date = rec["date"]
         if rec.get("outcome") is None and date < today:
-            ohlc = get_ohlc(rec["ticker"], date)
+            try:
+                ohlc = get_ohlc(rec["ticker"], date)
+            except Exception as e:                      # noqa: BLE001
+                failed += 1
+                print(f"[warn] grading {rec['ticker']} {date} failed: "
+                      f"{type(e).__name__}: {e}", file=sys.stderr, flush=True)
+                continue
             if ohlc:
                 graded = grade_record(rec, ohlc)
                 if graded:
@@ -171,6 +192,9 @@ def grade_pending(get_ohlc) -> dict:
                     changed = True
     if changed:
         store.save(recs)
+    if failed:
+        print(f"[warn] {failed} record(s) could not be graded this run — they "
+              f"stay pending and will be retried", file=sys.stderr, flush=True)
     return recs
 
 
