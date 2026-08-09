@@ -29,6 +29,22 @@ import config
 
 DIRNAME = "snapshots"
 
+#: BUMP THIS WHENEVER THE SNAPSHOT SHAPE CHANGES — a field added, renamed or
+#: given a new meaning.
+#:
+#: A restored board is written by the PREVIOUS build and read by this one, so
+#: any field added since is silently absent on the first load after an upgrade.
+#: Observed: level_map rows gained a `confluence` flag, the frontend type
+#: declared it required, and the restored board delivered rows without the key
+#: at all. It happened to degrade quietly because the value is only read as a
+#: boolean — the same shape as the `dir_hit_rate: number` that was actually
+#: null and blanked the screen.
+#:
+#: Refusing to restore across versions costs exactly one slow cold start after
+#: an upgrade and removes the whole class of "it works after a refresh" bugs.
+#: This is the same guard MIX_VERSION gives the track record.
+SCHEMA_VERSION = 2
+
 
 def _dir() -> str:
     return os.path.join(config.STORE_DIR, DIRNAME)
@@ -53,7 +69,9 @@ def save(ticker: str, snap: dict) -> bool:
         os.makedirs(_dir(), exist_ok=True)
         fd, tmp = tempfile.mkstemp(dir=_dir(), suffix=".tmp")
         with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(snap, f)
+            # Stamped on the way out rather than mutating the caller's dict,
+            # which is the live cached snapshot other threads are serialising.
+            json.dump({**snap, "schema": SCHEMA_VERSION}, f)
         os.replace(tmp, _path(ticker))
         return True
     except (OSError, TypeError, ValueError):
@@ -84,6 +102,13 @@ def load(ticker: str, max_age_days: int = 5) -> dict | None:
     except (OSError, ValueError):
         return None
     if not isinstance(snap, dict) or "gex" not in snap:
+        return None
+
+    # Written by a different build: the shape may not match what this code and
+    # the current frontend expect, and the mismatch would be invisible. Boot
+    # cold instead. A board saved before this guard existed carries no schema
+    # key at all, which is exactly the case it needs to reject.
+    if snap.get("schema") != SCHEMA_VERSION:
         return None
 
     stamp = str(snap.get("generated_at") or "")[:10]

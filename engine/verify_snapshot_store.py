@@ -115,6 +115,33 @@ for label, payload in (("empty dict", {}), ("None", None),
     except Exception as e:  # noqa: BLE001
         check(f"save({label}) did not raise", False, type(e).__name__)
 
+print("[9] a board written by a different build is not restored")
+# A restored snapshot is written by the PREVIOUS build and read by this one, so
+# any field added since is silently absent on the first load after an upgrade.
+# Observed: level_map rows gained `confluence`, the frontend type declared it
+# required, and the restored board delivered rows with no such key.
+today = config.today().isoformat()
+good = {"ticker": "SPY", "generated_at": f"{today} 09:31:00 EDT",
+        "gex": {"spot": 763.0}, "level_map": [{"price": 763.0, "role": "Spot"}]}
+ss.save("SPY", good)
+check("a board this build wrote is restored", ss.load("SPY") is not None)
+raw = json.load(open(ss._path("SPY"), encoding="utf-8"))
+check("the schema version is stamped on disk",
+      raw.get("schema") == ss.SCHEMA_VERSION, str(raw.get("schema")))
+check("and save did not mutate the caller's dict",
+      "schema" not in good, str(sorted(good)))
+
+for label, version in (("an older build", ss.SCHEMA_VERSION - 1),
+                       ("a newer build", ss.SCHEMA_VERSION + 1)):
+    with open(ss._path("SPY"), "w", encoding="utf-8") as f:
+        json.dump({**good, "schema": version}, f)
+    check(f"{label} is refused", ss.load("SPY") is None)
+
+# The case this guard exists for: every board saved before it was added.
+with open(ss._path("SPY"), "w", encoding="utf-8") as f:
+    json.dump(good, f)                       # no schema key at all
+check("a board predating the guard is refused", ss.load("SPY") is None)
+
 print("[8] no temp files left behind")
 d = os.path.join(config.STORE_DIR, ss.DIRNAME)
 leftovers = [f for f in os.listdir(d)] if os.path.isdir(d) else []
