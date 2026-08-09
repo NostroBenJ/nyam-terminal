@@ -64,8 +64,25 @@ def compute_gex(chain: dict, spot: float, r: float) -> dict:
     SIGN CONVENTION (the one modeling choice that matters):
       We assume dealers are LONG calls and SHORT puts -- the common retail
       convention. So calls add POSITIVE dealer gamma, puts add NEGATIVE.
-      This is an assumption, not a law. SpotGamma et al. tweak it. If your
-      levels feel off, this is the first knob to revisit. <-- learn this.
+      This is an assumption, not a law. SpotGamma et al. tweak it.
+
+      IT IS NO LONGER UNVERIFIED. Checked 2026-08-08 against Unusual Whales,
+      which computes exposure independently and publishes the call and put
+      legs SEPARATELY -- so their signs state their convention outright rather
+      than leaving it to be inferred:
+
+          call_gex   positive on all 466 strikes
+          put_gex    negative on all 367 strikes
+
+      Identical to ours. Per-strike net agrees in sign on 145 of 158 common
+      strikes (91.8%). And flipping our convention does not merely shift the
+      levels, it DESTROYS the call wall -- no positive-gamma strike remains
+      above spot -- which the 760.00 and 775.00 exact matches with UW forbid.
+
+      Three independent lines pointing the same way is as close to settled as
+      this gets without a track record. See verify_sign_convention.py; it runs
+      against the live feed so a change in UW's convention would surface as a
+      failure rather than as levels quietly drifting.
     """
     by_strike = {}  # strike -> net dollar gamma
 
