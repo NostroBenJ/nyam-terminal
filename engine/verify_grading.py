@@ -2,20 +2,26 @@
 verify_grading.py  --  the grader, and the crash it was hiding.
 
 WHY THIS SUITE EXISTS. get_ohlc feeds the hit rate, which is the only number
-that answers "does any of this work". It was the last yfinance dependency in
-the app, and yfinance is NOT in the frozen bundle — its dependencies came along
-via other imports but the package did not, because the import sits inside a
-function and nothing declared it.
+that answers "does any of this work", and it was the last place the app reached
+for a different vendor than the one the call was priced on.
 
-Nothing had broken only because every record happened to be graded already. The
-first ungraded call would have raised ImportError through grade_pending, which
-had no handler, and server.py calls grade_pending at STARTUP. The engine would
-have failed to boot on the first Tuesday after a Monday call — a crash whose
-trigger is "time passes", which is the worst kind to ship into a week you plan
-to trade.
+A NOTE ON A WRONG DIAGNOSIS, kept because the wrong version shipped. This file
+originally claimed yfinance was missing from the frozen bundle and that the
+engine would fail to boot the first time it graded. Both false. yfinance is
+pure Python, so PyInstaller packs it into the PYZ archive inside the executable
+instead of extracting a folder into _internal; searching _internal for a
+directory finds nothing and proves nothing. `graded 0 pending call(s)` was then
+read as corroboration when it only meant there was nothing to grade.
 
-Two things are checked here: that grading now runs on the same feed the call
-was made on, and that a grading failure can no longer take anything down.
+Two pieces of evidence, both absent-shaped, agreeing with each other is not
+evidence. The positive test — does the packaged engine actually import it —
+takes one call and was not run.
+
+The change stands anyway: grading on the same feed as the call removes real
+cross-vendor noise, and 4 of 4 stored outcomes re-graded identically, so no
+history was rewritten. What is checked here is that, and that a grading failure
+cannot take down the engine — which was always worth having, whatever the
+likelihood of it firing.
 
 Needs a live UW key. Run: python verify_grading.py
 """

@@ -97,21 +97,23 @@ def get_ohlc(ticker: str, date_iso: str) -> dict | None:
 
     # GRADE ON THE SAME FEED THE CALL WAS MADE ON.
     #
-    # This was the last yfinance dependency in the app, and it sat in the one
-    # place that matters most: the number that decides whether any of this
-    # works. Two faults, one latent and one live.
+    # A call priced at UW's spot but graded against Yahoo's bars can be marked
+    # wrong on a vendor difference rather than on the market. Small — the two
+    # agree to a couple of cents — but it is noise injected into the only
+    # measurement that answers whether any of this works, and there is no
+    # reason to carry it when the same feed can serve both.
     #
-    # LATENT — yfinance is not in the frozen bundle. Its dependencies came
-    # along via other imports, but the package itself did not, because this
-    # import is inside a function and nothing declared it. Nothing had broken
-    # yet only because every record happened to be graded already; the first
-    # ungraded call would have raised ImportError through grade_pending, which
-    # has no handler, and server.py calls that at STARTUP. The engine would
-    # have failed to boot on the first Tuesday after a Monday call.
+    # CORRECTION, kept because the wrong version of this comment shipped: an
+    # earlier note here claimed yfinance was absent from the frozen bundle and
+    # that the engine would fail to boot the first time it graded. Both false.
+    # yfinance is pure Python, so PyInstaller packs it into the PYZ archive
+    # inside the executable rather than extracting a folder into _internal —
+    # searching _internal for a directory finds nothing and proves nothing. The
+    # packaged engine imports it fine; the Week Ahead's earnings come through
+    # it today.
     #
-    # LIVE — a call made at UW's spot and graded against Yahoo's bars can be
-    # marked wrong on a vendor difference rather than on the market. Small, but
-    # it is noise injected into the only measurement that matters.
+    # The switch to UW still stands on its own merits, and the ImportError
+    # guard below is cheap insurance rather than a fix for a live fault.
     if config.PROVIDER == "uw" and config.UW_API_KEY:
         got = _uw_ohlc_for_grade(ticker, date_iso)
         if got is not None:
