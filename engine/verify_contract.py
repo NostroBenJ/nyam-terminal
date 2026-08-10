@@ -291,7 +291,11 @@ def main():
         p = (path.replace("${encodeURIComponent(ticker)}", ticker)
                  .replace("${encodeURIComponent(interval)}", "5m")
                  .replace("${days}", "5").replace("${limit}", "50")
-                 .replace("${sort}", "relevance"))
+                 .replace("${sort}", "relevance")
+                 # The trigger route takes a REQUIRED price; stripping it the
+                 # way the optional ternaries are stripped would send an empty
+                 # value and get a 422 that looks like a broken endpoint.
+                 .replace("${price}", "767").replace("${dir}", "long"))
         # Any remaining ${...} is a ternary that adds an optional query flag;
         # dropping it gives the default request the UI makes on load, which is
         # the one worth checking.

@@ -1144,6 +1144,67 @@ code {
    since .chip carries no margin of its own. */
 .levels__conf { margin-left: 6px; vertical-align: middle; }
 
+/* ── Trigger check ───────────────────────────────────────────────────────
+   The join between the board and an external entry model. Note that NOTHING
+   here uses --accent: rule 1 reserves copper for where price is NOW, and a
+   hypothetical trigger price is not that. Verdicts borrow the direction
+   tokens, which is what they are. */
+.trig__in { display: flex; gap: 8px; margin-bottom: 10px; }
+.trig__price {
+  flex: 1;
+  min-width: 0;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--text);
+  font-size: 14px;
+  padding: 6px 8px;
+}
+.trig__price:focus { outline: none; border-color: var(--neutral); }
+.trig__dirs { display: flex; gap: 4px; }
+.trig__dir {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--muted);
+  cursor: pointer;
+  font: 500 10px/1 var(--mono);
+  letter-spacing: 0.06em;
+  padding: 0 10px;
+}
+.trig__dir--on.trig__dir--long  { border-color: var(--up);   color: var(--up);   background: var(--up-soft); }
+.trig__dir--on.trig__dir--short { border-color: var(--down); color: var(--down); background: var(--down-soft); }
+
+.trig__verdict { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.trig__badge {
+  font: 600 9px/1 var(--mono);
+  letter-spacing: 0.1em;
+  padding: 4px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+.trig__verdict--up   .trig__badge { color: var(--up);      background: var(--up-soft); }
+.trig__verdict--down .trig__badge { color: var(--down);    background: var(--down-soft); }
+.trig__verdict--warn .trig__badge { color: var(--neutral); background: var(--neutral-soft); }
+.trig__verdict--flat .trig__badge { color: var(--muted);   background: var(--panel-2); }
+.trig__head { color: var(--text); font-size: 12px; }
+.trig__why { color: var(--muted); font-size: 11px; margin: 0 0 8px; line-height: 1.45; }
+
+.trig__lv { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+.trig__lv td { padding: 3px 0; font-size: 11px; vertical-align: baseline; }
+.trig__lvp { color: var(--neutral); width: 1%; white-space: nowrap; padding-right: 8px; }
+.trig__lvl { color: var(--muted); }
+.trig__act { font: 500 9px/1 var(--mono); letter-spacing: 0.05em; text-align: right; white-space: nowrap; padding-right: 8px; }
+.trig__act--up      { color: var(--up); }
+.trig__act--down    { color: var(--down); }
+.trig__act--flat    { color: var(--muted); }
+.trig__act--unknown { color: var(--neutral); }
+.trig__lvd { color: var(--dim); width: 1%; white-space: nowrap; }
+
+.trig__conf { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.trig__tg { color: var(--dim); font-size: 11px; display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.trig__tg b { color: var(--muted); font-weight: 500; }
+
 /* Stacked levels — a session level on a gamma level, and levels several
    expiries agree on. Both were computed and shipped from the start with
    nothing rendering them. Kept quiet and dense: this sits under the level

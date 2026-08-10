@@ -35,7 +35,7 @@ import chat as chat_mod
 import config
 from pipeline import build_snapshot
 from logging_obsidian import log_to_obsidian
-from analysis import changes, tracker
+from analysis import changes, tracker, trigger
 import store as store_mod
 from analysis import sessions
 from claude_brief import generate_brief_meta
@@ -505,6 +505,69 @@ async def api_chat(request: Request):
             yield f"[chat failed] {type(e).__name__}: {e}"
 
     return StreamingResponse(gen(), media_type="text/plain; charset=utf-8")
+
+
+@app.get("/api/trigger")
+def api_trigger(price: float, dir: str = "long", ticker: str = None):
+    """
+    What the board says about an entry trigger at `price` going `dir`.
+
+    Reads the live snapshot rather than rebuilding: this is asked at the moment
+    a candle closes, so it must answer instantly and must not spend a request.
+    """
+    t = (ticker or _active["ticker"]).upper()
+    with _lock:
+        snap = _latest.get(t)
+    if snap is None:
+        return JSONResponse({"available": False,
+                             "note": "No board loaded for this ticker yet."})
+    bull = str(dir).lower() in ("long", "buy", "bull", "up", "1", "true")
+    return JSONResponse(trigger.evaluate(snap, price, bull))
+
+
+@app.post("/api/cisd")
+async def api_cisd(request: Request):
+    """
+    Webhook sink for an external entry model (CISD° on TradingView).
+
+    Shares one evaluator with /api/trigger so the manual path and the automated
+    path can never drift into two different answers. Nothing here reaches the
+    market: it records what fired and returns the board's read of it.
+
+    TradingView cannot reach 127.0.0.1, so this only receives anything behind a
+    tunnel. It exists now so that turning that on later is a config change and
+    not a feature.
+    """
+    try:
+        body = await request.json()
+    except Exception:                                    # noqa: BLE001
+        return JSONResponse({"available": False, "note": "Body was not JSON."},
+                            status_code=400)
+    if not isinstance(body, dict):
+        return JSONResponse({"available": False, "note": "Expected a JSON object."},
+                            status_code=400)
+
+    t = str(body.get("ticker") or _active["ticker"]).upper()
+    raw = body.get("price")
+    try:
+        price = float(raw)
+    except (TypeError, ValueError):
+        return JSONResponse({"available": False,
+                             "note": f"Unusable price: {raw!r}"}, status_code=400)
+    bull = str(body.get("dir") or body.get("direction") or "").lower() in (
+        "long", "buy", "bull", "up")
+
+    with _lock:
+        snap = _latest.get(t)
+    if snap is None:
+        return JSONResponse({"available": False,
+                             "note": f"No board loaded for {t}."})
+    out = trigger.evaluate(snap, price, bull)
+    out["source"] = str(body.get("source") or "webhook")
+    out["grade"] = body.get("grade")
+    print(f"[{dt.datetime.now(config.TZ)}] CISD {out.get('direction')} "
+          f"{price} -> {out.get('verdict')}: {out.get('headline')}", flush=True)
+    return JSONResponse(out)
 
 
 @app.get("/api/changed")

@@ -538,6 +538,40 @@ export interface Calendar {
   spent: boolean;
 }
 
+/** One board level sitting inside the trigger's band. */
+export interface TriggerLevel {
+  label: string;
+  action: string;
+  level: number;
+  distance: number;
+  of_band: number | null;
+  /** +1 supports a long, -1 a short, 0 directionally neutral. Null means the
+   *  engine met a plan action its table has not been taught — reported rather
+   *  than folded into "neutral" so the drift shows up. */
+  supports: number | null;
+  why: string | null;
+}
+
+export interface TriggerVerdict {
+  available: boolean;
+  note?: string;
+  price?: number;
+  direction?: "long" | "short";
+  spot?: number;
+  regime?: string;
+  band?: number;
+  verdict?: "aligned" | "conflict" | "mixed" | "neutral" | "no_level";
+  headline?: string;
+  near?: TriggerLevel[];
+  nearest?: TriggerLevel | null;
+  confluence?: Confluence[];
+  targets?: {
+    next_level: TriggerLevel | null;
+    em_edge: number | null;
+    em_note: string;
+  };
+}
+
 export interface Health {
   ok: boolean;
   warm: string[];
@@ -666,6 +700,12 @@ export const api = {
       body: JSON.stringify({ ticker, date, note }),
     }),
   sessions: () => req<Sessions>("/api/sessions"),
+  /** What the board says about an entry trigger at `price`. Reads the cached
+   *  snapshot — asked the moment a candle closes, so it must not fetch. */
+  trigger: (ticker: string, price: number, dir: "long" | "short") =>
+    req<TriggerVerdict>(
+      `/api/trigger?ticker=${encodeURIComponent(ticker)}&price=${price}&dir=${dir}`
+    ),
   calendar: (refresh = false) =>
     req<Calendar>(`/api/calendar${refresh ? "?refresh=true" : ""}`),
   flow: (ticker: string, limit = 100) =>

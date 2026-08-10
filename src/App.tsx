@@ -9,6 +9,7 @@ import { DarkPool } from "./components/DarkPool";
 import { GexMatrix } from "./components/GexMatrix";
 import { NetFlow } from "./components/NetFlow";
 import { TheCall } from "./components/TheCall";
+import { TriggerCheck } from "./components/TriggerCheck";
 import { WhatChanged } from "./components/WhatChanged";
 import { StatusStrip } from "./components/StatusStrip";
 import { Sidebar, SECTIONS, type SectionId } from "./components/Sidebar";
@@ -212,6 +213,14 @@ export default function App() {
               <Panel title="What changed" subtitle="since the prior session's close"
                      {...panelProps}>
                 <WhatChanged ticker={snap!.ticker} />
+              </Panel>
+              {/* The join between this board and an external entry model. The
+                  board says WHERE, CISD° says WHEN, and neither knows about
+                  the other — so the join used to happen in your head at 09:31
+                  while a candle closed. */}
+              <Panel title="Trigger check" subtitle="does the board agree with this entry?"
+                     {...panelProps}>
+                <TriggerCheck ticker={snap!.ticker} spot={snap!.gex.spot} />
               </Panel>
               <Panel title="Net premium" subtitle={`${snap!.ticker} · calls minus puts, today`}
                      {...panelProps}>
