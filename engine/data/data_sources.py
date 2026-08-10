@@ -225,7 +225,15 @@ def _mock_bars(ticker: str, interval: str, lookback_days: int) -> dict:
     if n < 2:
         n = 2
 
-    rng = _r.Random(hash((ticker, interval, lookback_days)) & 0xFFFFFFFF)
+    # A STABLE seed. This used Python's builtin hash(), which is randomised per
+    # process for str — so mock bars were reproducible WITHIN a run (which is
+    # why the determinism check passed) and different on every new one. The
+    # point of mock mode is a fixture that does not move, and a volatility
+    # check against it failed roughly one run in ten for no reason but the
+    # seed. crc32 over the same key is stable across processes and releases.
+    import zlib
+    key = f"{ticker}|{interval}|{lookback_days}".encode("utf-8")
+    rng = _r.Random(zlib.crc32(key))
     # Per-bar sigma scaled off a ~0.8% daily move, so 1m and 30m bars look
     # like themselves rather than like the same series at different zooms.
     sigma = spot * 0.008 * math.sqrt(step / (6.5 * 3600))
@@ -301,6 +309,29 @@ def _uw_bars(ticker: str, interval: str, lookback_days: int) -> dict:
 
     rows = uw.ohlc(ticker, candle_size=interval, limit=1000)
     daily = interval not in _INTRADAY
+
+    # REGULAR HOURS ONLY on intraday charts. Positions can only be held
+    # 09:30-16:00, so pre- and post-market candles are price action that cannot
+    # be acted on — and being thin, their wicks stretch the axis that every
+    # level is read against. The overnight high/low LINES are unaffected: they
+    # come from `levels`, not from these bars, so nothing is lost but the
+    # untradeable prints.
+    #
+    # Filtered only when the field is actually present. If UW ever stops
+    # sending market_time, dropping every row would empty the chart and look
+    # exactly like a dead feed — so absence of the marker means no filter, and
+    # the note says which happened.
+    rth_note = ""
+    if not daily:
+        tagged = [r for r in rows if r.get("market_time")]
+        if tagged:
+            kept = [r for r in tagged if r.get("market_time") == uw.MT_REGULAR]
+            rth_note = (f"regular hours only ({len(rows) - len(kept)} "
+                        f"extended-hours bars hidden)")
+            rows = kept
+        else:
+            rth_note = "market_time absent — extended hours not filtered"
+
     bars = []
     for r in rows:
         # UW returns numbers as JSON STRINGS on many endpoints; coercing here
@@ -320,7 +351,7 @@ def _uw_bars(ticker: str, interval: str, lookback_days: int) -> dict:
                      "volume": int(float(r.get("volume", 0) or 0))})
     bars.sort(key=lambda b: b["time"])
     return {"bars": bars, "source": "unusual_whales", "interval": interval,
-            "note": "" if bars else "no bars returned"}
+            "note": ("no bars returned" if not bars else rth_note)}
 
 
 def get_market(ticker: str = None) -> dict:

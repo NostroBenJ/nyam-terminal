@@ -109,8 +109,16 @@ def main():
     check("my_window end == GRADE_EXIT_TIME",
           st["my_window"]["end"] == config.GRADE_EXIT_TIME,
           f'{st["my_window"]["end"]} vs {config.GRADE_EXIT_TIME}')
-    st = S.state(at(2026, 8, 3, 13, 0))
-    check("my_window inactive after it", st["my_window"]["active"] is False)
+    # DERIVED from the config, not hardcoded. This read `at(..., 13, 0)`, which
+    # meant "after the window" only while the window ended at 12:00 — the day
+    # the traded window moved to the closing bell, 13:00 became the middle of
+    # it and the check failed while nothing was actually wrong. A fixture that
+    # hardcodes the value it is testing against goes stale silently.
+    _end_h, _end_m = map(int, config.GRADE_EXIT_TIME.split(":"))
+    _after = at(2026, 8, 3, _end_h, _end_m) + dt.timedelta(minutes=1)
+    st = S.state(_after)
+    check(f"my_window inactive after it ({_after:%H:%M})",
+          st["my_window"]["active"] is False, str(st["my_window"]))
 
     print("[9] early closes")
     ec = S.early_closes(2026)

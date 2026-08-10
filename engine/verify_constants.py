@@ -18,6 +18,7 @@ Two things are pinned here, for opposite reasons:
 
 Needs a live UW key. Run: python verify_constants.py
 """
+import re
 import sys
 
 import config
@@ -139,9 +140,19 @@ check("refreshing begins before the open", _start_h < _open_h,
       f"{config.PREMARKET_START} vs {config.MARKET_OPEN}")
 check("and continues to the closing bell", _end_h >= 16,
       f"last auto-refresh {_end_h:02d}:59, market closes 16:00")
-check("the window is not tied to the grading exit",
-      config.SESSION_REFRESH_UNTIL != config.GRADE_EXIT_TIME,
-      "moving one would silently move the other")
+# Checks the SOURCE, not the values. The first version of this asserted
+# `SESSION_REFRESH_UNTIL != GRADE_EXIT_TIME`, which is a proxy for the thing it
+# cares about and a bad one: two independent constants may legitimately hold
+# the same value, and the day the grade window moved to 16:00 this check failed
+# while nothing was actually wrong. What matters is that neither is DERIVED
+# from the other, so moving one cannot silently move the other.
+_cfg_src = open(config.__file__, encoding="utf-8").read()
+check("the refresh window is its own constant, not derived from the grade exit",
+      not re.search(r"SESSION_REFRESH_UNTIL\s*=\s*[^\n#]*GRADE_EXIT_TIME", _cfg_src),
+      "one is computed from the other")
+check("and the grade exit is not derived from the refresh window",
+      not re.search(r"GRADE_EXIT_TIME\s*=\s*[^\n#]*SESSION_REFRESH_UNTIL", _cfg_src),
+      "one is computed from the other")
 
 print("[5] the daily request budget is enforced, not merely displayed")
 # It was counted and shown from the start and consulted by nothing. Survivable

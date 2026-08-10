@@ -231,11 +231,26 @@ OBSIDIAN_SUBFOLDER = "NYAM Bias"   # notes land in <vault>/<subfolder>/YYYY-MM-D
 # Where predictions + outcomes are stored (one JSON file you can open & inspect).
 STORE_DIR = os.path.join(BASE_DIR, "data_store")
 
-# THE GRADING WINDOW — grade the bias over the hours you actually trade.
-# You trade the open until roughly noon, so grading open->close was scoring the
-# call over ~4 hours you aren't in the market. A lean that's right at 12:00 and
-# wrong by 16:00 was being marked a loss you never took.
-GRADE_EXIT_TIME = "12:00"      # America/New_York; set to "16:00" for open->close
+# THE GRADING WINDOW — grade the bias over the hours you can actually hold.
+#
+# This was "12:00", from when the morning was the only part of the session
+# being traded: grading open->close scored the call over ~4 hours nobody was in
+# the market for, and a lean that was right at noon and wrong by the bell was
+# marked a loss that was never taken.
+#
+# Since 2026-08-10 the whole session is traded, and the broker permits holding
+# only 09:30-16:00 — so the window that can be held and the window being graded
+# are now the same thing, which is the property that makes a hit rate mean
+# anything. Grading to a time you cannot hold to is measuring somebody else's
+# trade.
+#
+# CHANGING THIS DOES NOT CORRUPT THE HISTORY. grade_rule_for() stamps the exact
+# window and band onto every outcome, tracker.compute_stats surfaces
+# `mixed_rules`, and the Journal shows it — the record already spans
+# open->12:00@0.1 and open->12:00@0.175 for the same reason. Old records keep
+# their old rule; they are never re-graded under a rule they were not made
+# under.
+GRADE_EXIT_TIME = "16:00"      # America/New_York; the closing bell
 
 # A move smaller than this (%) counts as a flat/range day, which is how a
 # NEUTRAL lean gets graded correct.

@@ -196,6 +196,44 @@ finally:
     config.STORE_DIR = _real_dir
     _shutil.rmtree(_sandbox, ignore_errors=True)
 
+print("[8] changing the grading rule never re-grades old records")
+# The window moved from open->12:00 to open->16:00 when the broker's holdable
+# window became the whole session. A record graded under the old rule must keep
+# its old verdict AND its old rule string: re-scoring history under a rule it
+# was not made under is how a hit rate stops describing anything.
+_real_dir2 = config.STORE_DIR
+_sandbox2 = _tempfile.mkdtemp(prefix="verify_rule_")
+config.STORE_DIR = _sandbox2
+try:
+    old = {"date": "2026-08-04", "ticker": "SPY", "bias": "SHORT LEAN",
+           "score": -2.5, "spot": 760.0, "predicted_dir": "down",
+           "outcome": {"open": 760.63, "exit": 768.44, "move_pct": 1.03,
+                       "actual_dir": "up", "correct": False,
+                       "rule": "open->12:00@0.175"}}
+    with open(tracker.store._path(), "w", encoding="utf-8") as f:
+        _json.dump({"SPY|2026-08-04": old}, f)
+    tracker.grade_pending(lambda t, d: {"open": 760.62, "exit": 771.28})
+    back = tracker.store.load()["SPY|2026-08-04"]["outcome"]
+    check("the old outcome is untouched", back["exit"] == 768.44, str(back["exit"]))
+    check("and keeps the rule it was graded under",
+          back["rule"] == "open->12:00@0.175", back["rule"])
+    check("the new rule stamps the new window",
+          config.GRADE_EXIT_TIME in config.grade_rule_for("SPY"),
+          config.grade_rule_for("SPY"))
+
+    # A history spanning two rules must SAY so rather than average them.
+    fresh = dict(old, date="2026-08-05")
+    fresh["outcome"] = dict(old["outcome"], rule=config.grade_rule_for("SPY"))
+    with open(tracker.store._path(), "w", encoding="utf-8") as f:
+        _json.dump({"SPY|2026-08-04": old, "SPY|2026-08-05": fresh}, f)
+    st = tracker.compute_stats(tracker.store.load(), ticker="SPY")
+    check("mixed rules are surfaced, not averaged silently",
+          st.get("mixed_rules") and len(st["mixed_rules"]) == 2,
+          str(st.get("mixed_rules")))
+finally:
+    config.STORE_DIR = _real_dir2
+    _shutil.rmtree(_sandbox2, ignore_errors=True)
+
 print()
 if _fail:
     print(f"{_fail} check(s) FAILED")
