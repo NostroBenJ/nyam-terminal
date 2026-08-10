@@ -27,6 +27,8 @@ import datetime as dt
 import json
 import os
 import sys
+import tempfile
+import time
 import traceback
 
 import config
@@ -38,14 +40,58 @@ def _day_dir(date_iso: str) -> str:
     return os.path.join(CAPTURE_DIR, date_iso)
 
 
+# os.replace contention window. A capture writes ten files and runs three times
+# a day; waiting a few hundred milliseconds is free, and giving up early loses
+# a session's chain.
+_REPLACE_ATTEMPTS = 8
+_REPLACE_BACKOFF = 0.02
+
+
 def _write(path: str, obj) -> int:
-    """Atomic write. A half-written capture is worse than a missing one."""
+    """
+    Atomic write. A half-written capture is worse than a missing one.
+
+    UNIQUE temp name and an fsync, for the reasons oi_store learned the hard
+    way: `path + ".tmp"` is one predictable name shared by every writer, and
+    two processes past it interleave into the same file — which os.replace
+    then installs ATOMICALLY, so the corruption arrives looking valid. The
+    three scheduled captures write into the SAME dated folder, and nothing
+    stops a manual run overlapping one of them.
+
+    The fsync matters because the rename is only atomic with respect to the
+    directory entry; without it the entry can point at bytes still sitting in
+    the OS cache. This folder is the one dataset that cannot be re-fetched for
+    a past date.
+    """
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(obj, f, separators=(",", ":"))
-    os.replace(tmp, path)
-    return os.path.getsize(path)
+    tmp = None
+    try:
+        fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), suffix=".tmp")
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(obj, f, separators=(",", ":"))
+            f.flush()
+            os.fsync(f.fileno())
+        # Windows raises ACCESS_DENIED from os.replace while another writer is
+        # swapping the same target. Unlike oi_store — where losing the race IS
+        # the intended outcome, since the first pull of a session wins — here
+        # every caller means its content to land, so this RETRIES rather than
+        # conceding, and raises if it never gets through.
+        last = None
+        for attempt in range(_REPLACE_ATTEMPTS):
+            try:
+                os.replace(tmp, path)
+                tmp = None
+                return os.path.getsize(path)
+            except OSError as exc:
+                last = exc
+                time.sleep(_REPLACE_BACKOFF * (attempt + 1))
+        raise last
+    finally:
+        if tmp and os.path.exists(tmp):
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
 
 
 def _log(msg: str) -> None:

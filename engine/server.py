@@ -602,11 +602,17 @@ def start_scheduler():
     """
     sched = BackgroundScheduler(timezone=str(config.TZ))
     start_h = int(config.PREMARKET_START.split(":")[0])
-    # Run through the window the bias is GRADED over, not just to the open.
-    # `hour=f"{start_h}-{open_h}"` stopped firing at 09:59, so the two hours
-    # actually traded had no auto-refresh: the board sat on its 10:00 snapshot
-    # while the age chip climbed. Cheap now that the chain is cached — the
-    # extra cycles re-fetch a quote, not 5 option chains.
+    # Runs to the CLOSE. `hour=f"{start_h}-{open_h}"` stopped firing at 09:59,
+    # so the two hours actually traded had no auto-refresh; extending it to the
+    # grading window then stopped it at 12:59, which was the same bug three
+    # hours later. See config.SESSION_REFRESH_UNTIL.
+    #
+    # NOT cheap, and the comment that used to sit here claiming otherwise was
+    # describing the Yahoo path. CHAIN_REFRESH_SECONDS guards _live_ticker's
+    # cache; _uw_market has no chain cache at all and walks the full paged
+    # chain on every cycle. Measured: 35 UW requests per refresh, ~22 of them
+    # that walk. Roughly 21k of the 30k daily budget for one ticker across
+    # 07:00-16:59 — which is why budget_exhausted() exists.
     end_h = int(config.SESSION_REFRESH_UNTIL.split(":")[0])
     every = max(config.REFRESH_SECONDS, 30)
     sched.add_job(scheduled_refresh, "cron", day_of_week="mon-fri",

@@ -14,8 +14,12 @@ diary, not data.
 """
 import json
 import os
+import re
+import shutil
 import sys
+import tempfile
 
+import capture
 import config
 
 FAILS = []
@@ -113,6 +117,60 @@ def main():
         check("records provider", bool(m.get("provider")), str(m.get("provider")))
         check("records whether a UW key was present", "uw_key" in m)
         check("records grading outcome", "graded" in m)
+        # Read by changes.prior_capture to decide what "yesterday" means. A
+        # forced weekend capture is a full, valid folder and was being used as
+        # a Monday baseline until this flag was consulted.
+        check("records whether it was a trading day", "trading_day" in m,
+              str(m.get("trading_day")))
+
+    print("[5] writes are atomic and survive two writers")
+    # The three scheduled captures write into the SAME dated folder, and
+    # nothing stops a manual run overlapping one. capture._write used
+    # `path + ".tmp"` — one predictable name for every writer — which is how
+    # oi_store came to install a corrupt file ATOMICALLY, looking valid.
+    import threading                                             # noqa: E402
+    src = open(capture.__file__, encoding="utf-8").read()
+    check("uses a unique temp name", "mkstemp" in src)
+    check("fsyncs before the swap", "fsync" in src,
+          "a rename is atomic for the directory entry, not for the bytes")
+    # Match the ASSIGNMENT, not the phrase. The first version searched for
+    # `path + ".tmp"` anywhere in the file and tripped on the docstring that
+    # explains why the code no longer does it — a check failing on its own
+    # explanation, which is worse than no check because it teaches you to
+    # ignore the suite.
+    check("does not open a predictable temp path",
+          not re.search(r'tmp\s*=\s*path\s*\+\s*"\.tmp"', src))
+
+    scratch = tempfile.mkdtemp(prefix="verify_capture_")
+    target = os.path.join(scratch, "contended.json")
+    gate = threading.Barrier(6)
+    errs = []
+
+    def _w(n):
+        payload = {"writer": n, "rows": [{"strike": 700 + i} for i in range(400)]}
+        gate.wait()
+        try:
+            capture._write(target, payload)
+        except Exception as exc:                                 # noqa: BLE001
+            errs.append(f"{type(exc).__name__}: {exc}")
+
+    ts = [threading.Thread(target=_w, args=(i,)) for i in range(6)]
+    for t in ts:
+        t.start()
+    for t in ts:
+        t.join()
+    check("no writer raised", not errs, "; ".join(errs[:2]))
+    try:
+        with open(target, encoding="utf-8") as f:
+            got = json.load(f)
+        check("the installed file is readable", True)
+        check("and complete", len(got.get("rows", [])) == 400, str(len(got.get("rows", []))))
+    except Exception as e:                                       # noqa: BLE001
+        check("the installed file is readable", False, f"{type(e).__name__}: {e}")
+    check("no orphaned temp files",
+          not [f for f in os.listdir(scratch) if f.endswith(".tmp")],
+          str([f for f in os.listdir(scratch) if f.endswith(".tmp")]))
+    shutil.rmtree(scratch, ignore_errors=True)
 
     print()
     if FAILS:
