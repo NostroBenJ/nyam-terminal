@@ -197,7 +197,33 @@ def scheduled_refresh():
                 return
         except Exception:                             # noqa: BLE001
             pass          # never let the guard itself stop a refresh
-    refresh()
+    snap = refresh()
+    _run_shadow(snap)
+
+
+def _run_shadow(snap: dict) -> None:
+    """
+    Evaluate the shadow bot against the board that was just built.
+
+    Wrapped whole. This is a RECORDER — it decides nothing the engine depends
+    on, so a fault in it must never cost a refresh. The board is the product;
+    the journal is a note about the board.
+    """
+    if not snap:
+        return
+    try:
+        from data import data_sources as ds
+        from strategy import shadow
+        t = (snap.get("ticker") or _active["ticker"]).upper()
+        d = shadow.run(snap, expiries=ds.quoted_expiries(t))
+        if d.get("journal", {}).get("written"):
+            what = (f"{d.get('playbook')} {d.get('direction')} @ {d.get('entry')}"
+                    if d.get("available") else "no trade")
+            print(f"[{dt.datetime.now(config.TZ)}] shadow: {what} — "
+                  f"{d.get('reason', '')[:90]}", flush=True)
+    except Exception as e:                            # noqa: BLE001
+        print(f"[{dt.datetime.now(config.TZ)}] shadow FAILED (board is "
+              f"unaffected): {type(e).__name__}: {e}", flush=True)
 
 
 def scheduled_log():
@@ -507,6 +533,26 @@ async def api_chat(request: Request):
     return StreamingResponse(gen(), media_type="text/plain; charset=utf-8")
 
 
+@app.get("/api/shadow")
+def api_shadow(ticker: str = None):
+    """
+    What the shadow bot makes of the current board.
+
+    A READ-ONLY VIEW OF A RECORDER. It evaluates against the cached snapshot
+    and writes nothing — the journal is written by the scheduler, so refreshing
+    this panel cannot manufacture log entries. Nothing here reaches a broker.
+    """
+    from data import data_sources as ds
+    from strategy import shadow
+    t = (ticker or _active["ticker"]).upper()
+    with _lock:
+        snap = _latest.get(t)
+    if snap is None:
+        return JSONResponse({"available": False,
+                             "reason": "No board loaded for this ticker yet."})
+    return JSONResponse(shadow.evaluate(snap, expiries=ds.quoted_expiries(t)))
+
+
 @app.get("/api/trigger")
 def api_trigger(price: float, dir: str = "long", ticker: str = None):
     """
@@ -690,6 +736,15 @@ def start_scheduler():
     sched.add_job(lambda: tracker.grade_pending(get_ohlc), "cron",
                   day_of_week="mon-fri", hour=grade_h, minute=grade_m)
     sched.start()
+    # Mark the journal so a quiet stretch is readable. The recorder only runs
+    # while the engine is up, so a gap means either "nothing changed" or
+    # "nobody was watching" — opposite facts, and silence cannot tell you
+    # which. Never allowed to stop the scheduler.
+    try:
+        from strategy import decision_log
+        decision_log.mark("recorder up")
+    except Exception:                                 # noqa: BLE001
+        pass
     return sched
 
 

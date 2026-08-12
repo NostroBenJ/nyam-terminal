@@ -57,6 +57,11 @@ def evaluate(snap: dict, *, expiries: list = None, now: dt.datetime = None,
 
     setup = playbook.build(snap, expiries=expiries)
     out["available"] = bool(setup.get("available"))
+    # Set on EVERY path, never merely absent. A missing field reads as falsy in
+    # both Python and JavaScript, which is the right answer for the wrong
+    # reason — and it is exactly the shape of the `dir_hit_rate` that once
+    # blanked the whole screen.
+    out["actionable"] = False
     if not setup.get("available"):
         out["reason"] = setup.get("reason")
         # A setup that got as far as being described and then failed on the

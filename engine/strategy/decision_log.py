@@ -184,7 +184,9 @@ def append_day(d: dict) -> str:
     day = d.get("at", "")[:10] or config.today().isoformat()
     path = os.path.join(_dir(), f"{day}.md")
     entry = f"- **{d.get('at','')[11:16]}** "
-    if d.get("available"):
+    if d.get("_marker"):
+        entry += f"`{d.get('reason', '')}`"
+    elif d.get("available"):
         entry += (f"**{d.get('playbook')} {d.get('direction')}** @ "
                   f"{d.get('entry')} → {d.get('target')} "
                   f"(stop {d.get('stop')})")
@@ -209,6 +211,20 @@ def append_day(d: dict) -> str:
         except OSError:
             prior = []
     return _write(path, "\n".join(head + prior + [entry]) + "\n")
+
+
+def mark(text: str, now: dt.datetime = None) -> str:
+    """
+    A session marker in the day log — recorder up, recorder down.
+
+    WITHOUT THESE, A GAP IS UNREADABLE. The recorder only runs while the engine
+    is up, so a quiet stretch in the log means either "nothing changed" or
+    "nobody was watching", and those are opposite facts. A silent hour is
+    evidence about the market only if something was awake to observe it.
+    """
+    now = now or dt.datetime.now(config.TZ)
+    return append_day({"at": now.isoformat(timespec="seconds"),
+                       "available": False, "reason": text, "_marker": True})
 
 
 _SHAPE = re.compile(r"[\d.]+")

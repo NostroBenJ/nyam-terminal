@@ -366,6 +366,27 @@ def get_market(ticker: str = None) -> dict:
 # ----------------------------------------------------------------------------
 # UNUSUAL WHALES  (paid; real-time chains, day-over-day OI, flow, dark pool)
 # ----------------------------------------------------------------------------
+#: Quote-enriched chain per ticker, refreshed by the market build. Deliberately
+#: NOT part of the snapshot — see the note where it is written.
+_quoted: dict = {}
+
+
+def quoted_expiries(ticker: str, max_age_s: int = 900) -> list | None:
+    """
+    The chain with quotes, or None when it is missing or stale.
+
+    None rather than an empty list, because "no chain" and "a chain with
+    nothing tradeable in it" are different answers and the strategy layer
+    reports them differently.
+    """
+    hit = _quoted.get((ticker or "").upper())
+    if not hit:
+        return None
+    if _time.time() - hit["at"] > max_age_s:
+        return None
+    return hit["expiries"]
+
+
 def _uw_market(ticker: str) -> dict:
     """
     UW for the option chain and the extras; Yahoo still supplies session OHLC
@@ -414,6 +435,21 @@ def _uw_market(ticker: str) -> dict:
         if expiries:
             market["primary"]["expiries"] = expiries
             market["sources"]["chain"] = "unusual_whales"
+        # A SECOND PASS OVER THE SAME CONTRACTS, kept out of the snapshot.
+        #
+        # The strategy layer needs symbol/bid/ask/delta to name a contract and
+        # price its friction; compute_gex needs none of it. Re-walking the
+        # chain for quotes would cost another ~22 requests per evaluation,
+        # which at a 60s cadence is the daily budget several times over — and
+        # putting them in the snapshot would push them onto disk and over the
+        # wire on every refresh for a panel that does not read them.
+        #
+        # So: same fetch, second shape, held in memory beside the board.
+        _quoted[ticker.upper()] = {
+            "at": _time.time(),
+            "expiries": uw.chain_to_expiries(contracts, config.GEX_MAX_DTE,
+                                             with_quotes=True),
+        }
 
     lv = _try("gex_levels", lambda: uw.gex_levels(ticker))
     if lv:
