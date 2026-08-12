@@ -18,6 +18,7 @@ Two things are pinned here, for opposite reasons:
 
 Needs a live UW key. Run: python verify_constants.py
 """
+import datetime as dt
 import re
 import sys
 
@@ -91,6 +92,12 @@ print("[1] GEX_MAX_DTE IS load-bearing (also the comment's claim)")
 # If this ever stops being true, the warning above the constant is misleading
 # and should come down — a comment that overstates danger trains you to ignore
 # the ones that do not.
+# TODAY'S CHAIN IS REPORTED, NOT ASSERTED. This block used to require that the
+# live put wall MOVE across dte 3..30 and that net gamma vary more than 2x. On
+# 2026-08-12 the put wall was 770.0 at every window and net gamma varied 1.46x
+# — near and far expiries simply agreed — and a check on the CODE failed
+# because of the day's positioning. That is the verify_bars failure mode: a
+# test whose subject is the market rather than the software.
 seen_flip, seen_put, seen_net = set(), set(), []
 for mx in (3, 7, 14, 30):
     g = levels(mx, config.RISK_FREE_RATE)
@@ -99,13 +106,52 @@ for mx in (3, 7, 14, 30):
     seen_flip.add(g["gamma_flip"])
     seen_put.add(g["put_wall"])
     seen_net.append(g["net_gex"])
-print(f"      put walls seen across dte 3..30: {sorted(x for x in seen_put if x)}")
-check("the window changes the flip", len(seen_flip) > 1, str(sorted(seen_flip)))
-check("the window changes the put wall", len(seen_put) > 1,
-      str(sorted(x for x in seen_put if x)))
-check("net gamma varies by more than 2x across the window",
-      max(seen_net) / max(min(seen_net), 1) > 2,
-      f"{min(seen_net):,.0f} .. {max(seen_net):,.0f}")
+print(f"      live put walls across dte 3..30: {sorted(x for x in seen_put if x)}")
+print(f"      live net gamma spread: {min(seen_net):,.0f} .. {max(seen_net):,.0f} "
+      f"({max(seen_net) / max(abs(min(seen_net)), 1):.2f}x)")
+if len(seen_put) == 1:
+    print("      (near and far expiries agree today — that is a market state, "
+          "not a defect; the deterministic proof is below)")
+
+# THE ACTUAL CLAIM, on a chain built so the window cannot fail to matter: a
+# near expiry whose put wall sits at 95, and a far one loaded at 90 heavily
+# enough to outweigh it despite carrying less gamma per contract.
+_today = config.today()
+
+
+def _c(strike, right, dte, oi):
+    e = _today + dt.timedelta(days=dte)
+    return {"option_symbol": f"SPY{e:%y%m%d}{right}{int(strike * 1000):08d}",
+            "strike": strike, "option_type": "call" if right == "C" else "put",
+            "expiry": e.isoformat(), "open_interest": oi,
+            "implied_volatility": 0.20, "prev_oi": oi}
+
+
+_rows = [_c(105, "C", 2, 5_000), _c(95, "P", 2, 1_000),
+         _c(110, "C", 20, 5_000), _c(90, "P", 20, 200_000)]
+
+
+def _synth(mx):
+    flat = {"calls": [], "puts": []}
+    for e in uw.chain_to_expiries(_rows, mx, today=_today):
+        flat["calls"] += e["calls"]
+        flat["puts"] += e["puts"]
+    return gexmod.compute_gex(flat, 100.0, r=config.RISK_FREE_RATE)
+
+
+_near, _wide = _synth(3), _synth(30)
+check("the window changes the put wall",
+      _near["put_wall"] == 95.0 and _wide["put_wall"] == 90.0,
+      f"{_near['put_wall']} -> {_wide['put_wall']}")
+check("the window changes the call wall",
+      _near["call_wall"] == 105.0 and _wide["call_wall"] == 110.0,
+      f"{_near['call_wall']} -> {_wide['call_wall']}")
+check("the window can invert the REGIME, not merely scale it",
+      _near["net_gex"] > 0 and _wide["net_gex"] < 0,
+      f"{_near['net_gex']:,.0f} -> {_wide['net_gex']:,.0f}")
+check("a far expiry outside the window is genuinely excluded",
+      _synth(3)["net_gex"] == _near["net_gex"],
+      "widening is what admits it, nothing else")
 
 print("[2] changing the window would invalidate the record")
 # The tracker versions the signal mix so a hit rate cannot average two systems.

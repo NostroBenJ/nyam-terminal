@@ -66,11 +66,45 @@ flipped = gexmod.compute_gex({"calls": flat["puts"], "puts": flat["calls"]},
                              spot, r=config.RISK_FREE_RATE)
 check("ours produces a call wall", ours["call_wall"] is not None,
       str(ours["call_wall"]))
-check("the flipped convention produces NONE", flipped["call_wall"] is None,
-      on_fail=f"got {flipped['call_wall']} — the argument from absence is gone")
+# Net gamma negating under the swap is an IDENTITY — true on any chain on any
+# day — so it is asserted against the live feed.
 check("net gamma is exactly negated by the flip",
       abs(ours["net_gex"] + flipped["net_gex"]) < 1.0,
       f"{ours['net_gex']:,.0f} vs {flipped['net_gex']:,.0f}")
+# The live flipped call wall is NOT an identity, so it is reported, not
+# asserted. See [1b].
+print(f"      live flipped call wall: {flipped['call_wall']}")
+
+print("[1b] the flip destroys the wall — on a chain where that MUST hold")
+# This used to assert `flipped["call_wall"] is None` against the LIVE chain,
+# making it an argument from absence resting on market composition. Walls are
+# computed per strike as call gamma MINUS put gamma, so the flipped call wall
+# is None only while NO strike above spot is put-dominated. On 2026-08-12
+# exactly one was — 773.0, half a point above spot, where near-ATM put gamma
+# outweighed call gamma — and a test of the SIGN CONVENTION failed because of
+# where the puts happened to sit that morning.
+#
+# The convention is a property of the code, so it is tested on a chain built to
+# have exactly one answer: calls only above spot, puts only below.
+_S = 100.0
+_synth = {
+    "calls": [{"strike": 105.0, "oi": 5000, "iv": 0.20, "t_years": 5 / 365.0}],
+    "puts":  [{"strike":  95.0, "oi": 5000, "iv": 0.20, "t_years": 5 / 365.0}],
+}
+_ok = gexmod.compute_gex(_synth, _S, r=config.RISK_FREE_RATE)
+_fl = gexmod.compute_gex({"calls": _synth["puts"], "puts": _synth["calls"]},
+                         _S, r=config.RISK_FREE_RATE)
+check("calls above spot make a call wall", _ok["call_wall"] == 105.0,
+      str(_ok["call_wall"]))
+check("puts below spot make a put wall", _ok["put_wall"] == 95.0,
+      str(_ok["put_wall"]))
+check("flipped: nothing above spot is positive, so no call wall",
+      _fl["call_wall"] is None, str(_fl["call_wall"]))
+check("flipped: nothing below spot is negative, so no put wall",
+      _fl["put_wall"] is None, str(_fl["put_wall"]))
+check("and the flip negates net gamma here too",
+      abs(_ok["net_gex"] + _fl["net_gex"]) < 1e-6,
+      f"{_ok['net_gex']:,.2f} vs {_fl['net_gex']:,.2f}")
 
 print("[2] per-strike sign agreement with UW")
 uw_net = {}
