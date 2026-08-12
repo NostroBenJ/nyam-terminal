@@ -410,7 +410,8 @@ def stock_state(ticker: str) -> dict:
 # ---------------------------------------------------------------------------
 # translation into the dashboard's contract
 # ---------------------------------------------------------------------------
-def chain_to_expiries(contracts: list, max_dte: int, today: dt.date = None) -> list:
+def chain_to_expiries(contracts: list, max_dte: int, today: dt.date = None,
+                      with_quotes: bool = False) -> list:
     """
     Reshape UW option contracts into the per-expiry structure compute_gex()
     consumes: [{label, dte, calls:[{strike,oi,iv,t_years,oi_change}], puts:[...]}]
@@ -418,6 +419,16 @@ def chain_to_expiries(contracts: list, max_dte: int, today: dt.date = None) -> l
     Contract identity comes from `option_symbol` (OCC format, e.g.
     SPY260724C00600000) when UW doesn't hand back parsed fields — the strike and
     right are encoded in the last 15 characters of that symbol.
+
+    `with_quotes` additionally keeps `symbol`, `bid`, `ask`, `delta` and
+    `volume`. OFF by default and deliberately so: compute_gex needs none of it,
+    the board is built from this on every refresh, and the fields would ride
+    into every snapshot on disk and over the wire for no reader.
+
+    The strategy layer DOES need them — you cannot name a contract to trade, or
+    price the friction of trading it, from strike and OI alone. The data is
+    already in hand at this point and was simply being discarded, so this costs
+    no extra request.
     """
     # config.today(), not date.today(): DTE feeds t_years feeds gamma. A date
     # off by one on a non-ET host mis-prices the entire chain.
@@ -456,6 +467,15 @@ def chain_to_expiries(contracts: list, max_dte: int, today: dt.date = None) -> l
             # on live data. UW carries the previous session's OI.
             "oi_change": oi - _i(c, "prev_oi", oi),
         }
+        if with_quotes:
+            # nbbo_bid/nbbo_ask arrive as STRINGS, like most UW numerics. _f
+            # coerces; a contract whose quote will not parse keeps 0.0 and is
+            # filtered downstream on liquidity rather than silently priced.
+            row["symbol"] = sym
+            row["bid"] = _f(c, "nbbo_bid")
+            row["ask"] = _f(c, "nbbo_ask")
+            row["delta"] = _f(c, "delta")
+            row["volume"] = _i(c, "volume")
         e = by_expiry.setdefault(expiry, {"label": str(expiry), "dte": dte,
                                           "calls": [], "puts": []})
         (e["calls"] if right.startswith("c") else e["puts"]).append(row)
