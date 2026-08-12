@@ -291,3 +291,43 @@ def grade_rule_for(ticker: str) -> str:
 GRADE_RULE = f"open->{GRADE_EXIT_TIME}@{GRADE_BAND_PCT}"
 
 GRADE_TIME = "16:15"   # when to run grading (America/New_York)
+
+
+# ============================================================================
+# PHASE 2 — RISK
+#
+# Nothing in this block reaches a broker. It sizes and vetoes a *proposed*
+# trade; execution is staged for a human click.
+# ============================================================================
+
+# The number position sizing is computed from. YOURS TO SET — it is deliberately
+# not read from the broker, because a bot that discovers its own buying power
+# is a bot that can grow its size after a good run without anyone deciding to.
+ACCOUNT_VALUE = 25_000.0
+
+# Fraction of the account risked on one idea. 0.5% of 25k is $125 — small
+# enough that being wrong eight times in a row (which this signal has very
+# nearly done) costs 4% rather than the account.
+RISK_PCT_PER_TRADE = 0.005
+
+# The day stops when realised losses reach this. Measured against
+# ACCOUNT_VALUE, not against the day's high-water mark: a rule that lets you
+# lose more because you were up earlier is a rule that funds tilt.
+MAX_DAILY_LOSS_PCT = 0.02
+
+# Concurrent open positions. One at a time while the signal is unproven — two
+# correlated SPY options are one position wearing a disguise.
+MAX_CONCURRENT_POSITIONS = 1
+
+# Hard ceiling on contracts per order, whatever the arithmetic says. A sizing
+# bug that asks for 400 contracts should hit a wall it cannot compute past.
+MAX_CONTRACTS = 10
+
+# No new entry inside this many minutes of a high-impact release. The board
+# already knows the calendar; this is what makes it act on it. Positioning
+# signals are least reliable exactly when the print lands.
+NO_ENTRY_BEFORE_EVENT_MIN = 15
+
+# No new entry after this. Late-day 0DTE/1DTE decay is brutal and the closing
+# auction is not a price you can rely on getting out at.
+NO_ENTRY_AFTER = "15:30"    # America/New_York
