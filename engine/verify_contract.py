@@ -259,6 +259,9 @@ EXTRA_OK = {
     ".bias.mix", ".records[].mix",   # mix is read in aggregate on TrackRecord
     ".records[].context.expected_move.dte",   # the horizon; band is what shows
     "._wall",                        # server-side build timing, for profiling
+    # Written into the Obsidian note's frontmatter, not read by any panel: the
+    # journal is where a decision gets queried later, the panel only shows now.
+    ".status", ".score", ".mix",
     # The full ISO timestamp. WeekAhead renders `date` and `time` separately,
     # which are derived from this and already exchange-local.
     ".headline.at", ".high_impact[].at", ".upcoming_earnings[].at",

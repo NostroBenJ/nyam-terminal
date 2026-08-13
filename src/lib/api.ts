@@ -572,6 +572,59 @@ export interface TriggerVerdict {
   };
 }
 
+/** How often a setup appeared today — the headline number of the shadow phase. */
+export interface ShadowTally {
+  date: string | null;
+  evaluations: number;
+  setups: number;
+  actionable: number;
+  blocked: number;
+  first_setup_at: string | null;
+  last_at: string | null;
+}
+
+/**
+ * What the recorder makes of the board. A DESCRIPTION, never an instruction —
+ * nothing in the engine's strategy layer can reach a broker, and that is
+ * enforced by a grep in the verification suite.
+ */
+export interface ShadowDecision {
+  available: boolean;
+  /** A real setup, sized, with nothing blocking it. Still not an order. */
+  actionable: boolean;
+  reason?: string;
+  at?: string;
+  ticker?: string;
+  regime?: string;
+  bias?: string;
+  spot?: number;
+  playbook?: "range" | "directional" | string;
+  direction?: "long" | "short";
+  structure?: string;
+  entry?: number;
+  target?: number;
+  stop?: number;
+  entry_why?: string;
+  target_why?: string;
+  stop_why?: string;
+  risk_points?: number;
+  reward_points?: number;
+  blocks?: string[];
+  warnings?: string[];
+  notes?: string[];
+  board?: { verdict?: string; headline?: string };
+  contract?: {
+    symbol: string; strike: number; right: string; expiry: string;
+    dte: number; delta: number; mid: number; round_trip_pct: number;
+  } | null;
+  sizing?: {
+    ok: boolean; contracts?: number; premium_total?: number;
+    est_loss_at_stop?: number; max_loss?: number;
+    binding_constraint?: string; reason?: string;
+  };
+  tally: ShadowTally;
+}
+
 export interface Health {
   ok: boolean;
   warm: string[];
@@ -700,6 +753,10 @@ export const api = {
       body: JSON.stringify({ ticker, date, note }),
     }),
   sessions: () => req<Sessions>("/api/sessions"),
+  /** The recorder's current read. Read-only: the engine counts from the
+   *  scheduler, so polling this cannot inflate the tally. */
+  shadow: (ticker: string) =>
+    req<ShadowDecision>(`/api/shadow?ticker=${encodeURIComponent(ticker)}`),
   /** What the board says about an entry trigger at `price`. Reads the cached
    *  snapshot — asked the moment a candle closes, so it must not fetch. */
   trigger: (ticker: string, price: number, dir: "long" | "short") =>

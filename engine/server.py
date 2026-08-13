@@ -556,9 +556,14 @@ def api_shadow(ticker: str = None):
     with _lock:
         snap = _latest.get(t)
     if snap is None:
-        return JSONResponse({"available": False,
+        return JSONResponse({"available": False, "actionable": False,
+                             "tally": shadow.tally(),
                              "reason": "No board loaded for this ticker yet."})
-    return JSONResponse(shadow.evaluate(snap, expiries=ds.quoted_expiries(t)))
+    out = shadow.evaluate(snap, expiries=ds.quoted_expiries(t))
+    # Counted by run(), never here — a number that grows when you look at it is
+    # not a measurement.
+    out["tally"] = shadow.tally()
+    return JSONResponse(out)
 
 
 @app.get("/api/trigger")

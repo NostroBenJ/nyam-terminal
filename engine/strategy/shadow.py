@@ -30,6 +30,37 @@ from strategy import decision_log, playbook, risk
 #: four hundred times a session.
 _last: dict = {}
 
+#: Today's count. THIS IS THE HEADLINE NUMBER OF PHASE TWO — how often a setup
+#: appears at all, which nothing in the app has ever been able to answer.
+#: Counted from run(), never from evaluate(), so opening a panel cannot inflate
+#: it: a number that grows when you look at it is not a measurement.
+_tally: dict = {"date": None, "evaluations": 0, "setups": 0, "actionable": 0,
+                "blocked": 0, "first_setup_at": None, "last_at": None}
+
+
+def tally() -> dict:
+    """Today's counts, rolled over on the exchange day."""
+    today = config.today().isoformat()
+    if _tally["date"] != today:
+        _tally.update({"date": today, "evaluations": 0, "setups": 0,
+                       "actionable": 0, "blocked": 0, "first_setup_at": None,
+                       "last_at": None})
+    return dict(_tally)
+
+
+def _count(d: dict) -> None:
+    tally()                                   # rolls the day if it has turned
+    _tally["evaluations"] += 1
+    _tally["last_at"] = (d.get("at") or "")[11:16]
+    if d.get("available"):
+        _tally["setups"] += 1
+        if not _tally["first_setup_at"]:
+            _tally["first_setup_at"] = _tally["last_at"]
+        if d.get("actionable"):
+            _tally["actionable"] += 1
+        else:
+            _tally["blocked"] += 1
+
 
 def evaluate(snap: dict, *, expiries: list = None, now: dt.datetime = None,
              day_pnl: float = 0.0, open_positions: int = 0) -> dict:
@@ -120,5 +151,6 @@ def run(snap: dict, **kw) -> dict:
     """evaluate + record. What the scheduler calls."""
     d = evaluate(snap, **{k: v for k, v in kw.items()
                           if k in ("expiries", "now", "day_pnl", "open_positions")})
+    _count(d)
     d["journal"] = record(d, force=kw.get("force", False))
     return d

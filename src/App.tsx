@@ -9,6 +9,7 @@ import { DarkPool } from "./components/DarkPool";
 import { GexMatrix } from "./components/GexMatrix";
 import { NetFlow } from "./components/NetFlow";
 import { TheCall } from "./components/TheCall";
+import { Shadow } from "./components/Shadow";
 import { TriggerCheck } from "./components/TriggerCheck";
 import { WhatChanged } from "./components/WhatChanged";
 import { StatusStrip } from "./components/StatusStrip";
@@ -218,6 +219,14 @@ export default function App() {
                   board says WHERE, CISD° says WHEN, and neither knows about
                   the other — so the join used to happen in your head at 09:31
                   while a candle closed. */}
+              {/* Records what the board implies and places nothing. Kept
+                  quiet on purpose: the shadow measures the strategy
+                  independently, and the louder it is the more your own trades
+                  correlate with it and the less the sample says. */}
+              <Panel title="Shadow" subtitle="records only — places nothing"
+                     {...panelProps}>
+                <Shadow ticker={snap!.ticker} />
+              </Panel>
               <Panel title="Trigger check" subtitle="does the board agree with this entry?"
                      {...panelProps}>
                 <TriggerCheck ticker={snap!.ticker} spot={snap!.gex.spot} />
