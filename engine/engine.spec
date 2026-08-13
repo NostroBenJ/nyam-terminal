@@ -22,6 +22,17 @@ hidden = [
     # key sitting right there. Anything imported inside a function goes here.
     "data.uw_socket",
     "data.unusual_whales",
+    # The shadow recorder. server.py imports these INSIDE _run_shadow and
+    # api_shadow so a fault in the journal can never stop the engine booting —
+    # which also means static analysis never sees them, and the packaged build
+    # would raise ModuleNotFoundError the first time the scheduler fired. That
+    # is precisely how `anthropic` was missed, and it failed only once frozen.
+    "strategy",
+    "strategy.shadow",
+    "strategy.playbook",
+    "strategy.contracts",
+    "strategy.risk",
+    "strategy.decision_log",
     # Imported inside main() only when --capture is passed, so static analysis
     # never sees it. Without this the scheduled recorder fails in the packaged
     # build and works in dev — the worst possible split, because the thing that

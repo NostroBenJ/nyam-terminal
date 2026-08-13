@@ -478,7 +478,15 @@ def api_ticker(ticker: str):
 
 @app.post("/api/refresh")
 def api_refresh(ticker: str = None):
-    return JSONResponse(refresh(ticker))
+    # The recorder runs here too. A board you asked for at 10:47 is the same
+    # board the scheduler would have built at 10:47, and a setup on it is just
+    # as real an observation — journalling only the automatic ones would leave
+    # a history whose gaps depend on when you happened to press a button. The
+    # state-key dedup means a manual refresh that changes nothing writes
+    # nothing.
+    snap = refresh(ticker)
+    _run_shadow(snap)
+    return JSONResponse(snap)
 
 
 @app.post("/api/start")
