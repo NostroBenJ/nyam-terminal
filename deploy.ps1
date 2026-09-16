@@ -9,8 +9,8 @@
 # the API keys. Both are excluded from the mirror rather than copied over,
 # because /MIR without exclusions would delete them.
 
-$src = "C:\Users\jontr\dev\nyam-terminal"
-$dst = "C:\Users\jontr\dev\NYAM Terminal"
+$src = $PSScriptRoot
+$dst = Join-Path (Split-Path $PSScriptRoot) "NYAM Terminal"
 $ok  = $true
 
 $envPath   = Join-Path $dst "engine\.env"
